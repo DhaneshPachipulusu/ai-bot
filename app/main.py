@@ -10,7 +10,7 @@ app = FastAPI(title="AI Interview Bot")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000","https://ai-bot-ikyi.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
