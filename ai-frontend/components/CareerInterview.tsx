@@ -90,8 +90,7 @@ export default function CareerInterview() {
     setLoading(true);
 
     try {
-      // Generate questions based on role (no resume)
-      const response = await fetch("https://ai-bot-ikyi.onrender.com/api/generate-role-questions", {
+      const response = await fetch("http://localhost:8000/api/generate-role-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -102,19 +101,12 @@ export default function CareerInterview() {
 
       const questions = await response.json();
 
-      // Store in session FIRST, then navigate
-      // Set mode first so interview page knows this is career mode
       sessionStorage.setItem("interview_mode", "career");
       sessionStorage.setItem("interview_role", selectedRole.title);
       sessionStorage.setItem("interview_level", selectedLevel);
       sessionStorage.setItem("current_user_id", user.id.toString());
       sessionStorage.setItem("questions", JSON.stringify(questions));
-      
-      console.log("Career Interview - Saved to session:");
-      console.log("- Mode:", sessionStorage.getItem("interview_mode"));
-      console.log("- Questions:", !!sessionStorage.getItem("questions"));
 
-      // Small delay to ensure sessionStorage is written
       setTimeout(() => {
         router.push("/interview");
       }, 100);
@@ -130,17 +122,17 @@ export default function CareerInterview() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-bold text-white mb-2">
           Practice by Career Role
         </h1>
-        <p className="text-gray-600">
+        <p className="text-gray-400">
           Select a role to practice common interview questions — no resume needed
         </p>
       </div>
 
       {/* Role Selection */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">
+      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6 mb-6">
+        <h2 className="text-lg font-bold text-white mb-4">
           1. Choose a Role
         </h2>
 
@@ -154,15 +146,15 @@ export default function CareerInterview() {
               }}
               className={`p-4 rounded-xl border-2 text-left transition-all ${
                 selectedRole?.id === role.id
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                  ? "border-blue-500 bg-blue-500/20"
+                  : "border-slate-600 hover:border-blue-400 hover:bg-slate-700/50"
               }`}
             >
               <span className="text-2xl">{role.icon}</span>
-              <p className="font-semibold text-gray-900 mt-2 text-sm">
+              <p className="font-semibold text-white mt-2 text-sm">
                 {role.title}
               </p>
-              <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+              <p className="text-xs text-gray-400 mt-1 line-clamp-2">
                 {role.description}
               </p>
             </button>
@@ -172,8 +164,8 @@ export default function CareerInterview() {
 
       {/* Level Selection */}
       {selectedRole && (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6 mb-6">
+          <h2 className="text-lg font-bold text-white mb-4">
             2. Select Experience Level
           </h2>
 
@@ -185,7 +177,7 @@ export default function CareerInterview() {
                 className={`px-6 py-3 rounded-xl font-medium transition-all ${
                   selectedLevel === level
                     ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    : "bg-slate-700 text-gray-300 hover:bg-slate-600"
                 }`}
               >
                 {level}
@@ -197,29 +189,29 @@ export default function CareerInterview() {
 
       {/* Interview Preview */}
       {selectedRole && selectedLevel && (
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-3">
+        <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 rounded-2xl border border-blue-500/30 p-6 mb-6">
+          <h2 className="text-lg font-bold text-white mb-3">
             Interview Preview
           </h2>
 
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-500">Role</p>
-              <p className="font-semibold text-gray-900">
+              <p className="text-gray-400">Role</p>
+              <p className="font-semibold text-white">
                 {selectedRole.icon} {selectedRole.title}
               </p>
             </div>
             <div>
-              <p className="text-gray-500">Level</p>
-              <p className="font-semibold text-gray-900">{selectedLevel}</p>
+              <p className="text-gray-400">Level</p>
+              <p className="font-semibold text-white">{selectedLevel}</p>
             </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-blue-200">
-            <p className="text-sm text-gray-600 mb-2">
+          <div className="mt-4 pt-4 border-t border-blue-500/30">
+            <p className="text-sm text-gray-300 mb-2">
               <strong>What to expect:</strong>
             </p>
-            <ul className="text-sm text-gray-600 space-y-1">
+            <ul className="text-sm text-gray-400 space-y-1">
               <li>• Self introduction</li>
               <li>• Technical questions for {selectedRole.title}</li>
               <li>• Behavioral questions (strengths, challenges)</li>
@@ -236,8 +228,8 @@ export default function CareerInterview() {
         disabled={!selectedRole || !selectedLevel || loading}
         className={`w-full py-4 rounded-xl font-semibold text-lg transition-all ${
           selectedRole && selectedLevel && !loading
-            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg"
-            : "bg-gray-200 text-gray-400 cursor-not-allowed"
+            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25"
+            : "bg-slate-700 text-gray-500 cursor-not-allowed"
         }`}
       >
         {loading ? (
@@ -256,7 +248,7 @@ export default function CareerInterview() {
       {/* Note */}
       <p className="text-center text-sm text-gray-500 mt-4">
         💡 For personalized questions based on your experience,{" "}
-        <a href="/interview" className="text-blue-600 hover:underline">
+        <a href="/interview" className="text-blue-400 hover:underline">
           upload your resume instead
         </a>
       </p>

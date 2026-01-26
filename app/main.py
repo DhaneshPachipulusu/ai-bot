@@ -5,6 +5,7 @@ from app.routes import resume, interview, analysis
 from app import database as db
 import os
 from app.routes import career
+from app.routes.interview_v2 import router as interview_v2_router
 
 app = FastAPI(title="AI Interview Bot")
 
@@ -31,6 +32,7 @@ app.include_router(resume.router, prefix="/api")
 app.include_router(interview.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(career.router, prefix="/api")
+app.include_router(interview_v2_router, prefix="/api")
 
 
 # ==================

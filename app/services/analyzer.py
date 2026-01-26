@@ -1,4 +1,5 @@
 import json
+import os
 from app.config import USE_MOCK_AI, client
 
 # ---------------- MOCKS ----------------
@@ -69,6 +70,32 @@ MOCK_RESUME_ANALYSIS = {
 
 
 # ==================================================
+# HELPER: Find interview file in multiple locations
+# ==================================================
+def find_interview_file(interview_id: str) -> str:
+    """
+    Find interview file - checks multiple possible locations.
+    Returns the path if found, raises FileNotFoundError if not.
+    """
+    possible_paths = [
+        f"data/conversations/{interview_id}.json",  # Old system
+        f"data/interviews/{interview_id}.json",     # New system (interview_v2)
+        f"./data/conversations/{interview_id}.json",
+        f"./data/interviews/{interview_id}.json",
+    ]
+    
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    # If not found, raise error with helpful message
+    raise FileNotFoundError(
+        f"Interview file not found for ID: {interview_id}. "
+        f"Checked: {', '.join(possible_paths)}"
+    )
+
+
+# ==================================================
 # 1️⃣ QUICK PER-ANSWER ANALYSIS (FOR CONVERSATION)
 # ==================================================
 def analyze_answer(answer: str) -> dict:
@@ -100,8 +127,25 @@ Answer: {answer}
 # 2️⃣ FULL INTERVIEW ANALYSIS (FINAL REPORT)
 # ==================================================
 def analyze_interview(interview_file_path: str) -> dict:
+    """
+    Analyze a completed interview and generate a report.
+    
+    Args:
+        interview_file_path: Can be either:
+            - Full path to the file
+            - Just the interview_id (will search in known locations)
+    """
     if USE_MOCK_AI:
         return MOCK_FINAL_ANALYSIS
+
+    # If it's just an ID (no path separators), find the file
+    if not os.path.sep in interview_file_path and not '/' in interview_file_path:
+        # It's just an interview ID
+        interview_file_path = find_interview_file(interview_file_path)
+    elif not os.path.exists(interview_file_path):
+        # It's a path but doesn't exist - try to extract ID and find it
+        interview_id = os.path.basename(interview_file_path).replace('.json', '')
+        interview_file_path = find_interview_file(interview_id)
 
     with open(interview_file_path) as f:
         interview_data = json.load(f)

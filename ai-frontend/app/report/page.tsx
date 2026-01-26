@@ -1,300 +1,303 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { analyzeInterview } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-/* ------------------ CIRCULAR SCORE COMPONENT ------------------ */
-function CircleScore({
-  label,
-  value,
-  size = 110,
-}: {
-  label: string;
-  value: number;
-  size?: number;
-}) {
-  const radius = size / 2 - 8;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (value / 10) * circumference;
-
-  const color =
-    value >= 8
-      ? "#22c55e"
-      : value >= 6
-      ? "#facc15"
-      : "#ef4444";
-
-  return (
-    <div className="flex flex-col items-center group hover:scale-105 transition-transform duration-300">
-      <div className="relative">
-        <svg width={size} height={size}>
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke="#e5e7eb"
-            strokeWidth="8"
-            fill="none"
-          />
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={color}
-            strokeWidth="8"
-            fill="none"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            className="transition-all duration-1000 ease-out"
-          />
-          <text
-            x="50%"
-            y="50%"
-            dominantBaseline="middle"
-            textAnchor="middle"
-            className="text-2xl font-bold"
-            style={{ fill: color }}
-          >
-            {value}
-          </text>
-        </svg>
-        <div 
-          className="absolute inset-0 rounded-full blur-xl opacity-20 group-hover:opacity-30 transition-opacity"
-          style={{ backgroundColor: color }}
-        />
-      </div>
-      <p className="mt-3 text-sm font-semibold text-gray-700">
-        {label}
-      </p>
-    </div>
-  );
+interface QAFeedback {
+  question: string;
+  user_answer: string;
+  better_answer?: string;
+  score?: number;
 }
 
-/* ------------------ REPORT PAGE ------------------ */
+interface ReportData {
+  overall_score: number | string;
+  fluency: number | string;
+  grammar: number | string;
+  technical_depth: number | string;
+  confidence: number | string;
+  clarity: number | string;
+  response_pace: number | string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  job_readiness: string;
+  qa_feedback?: QAFeedback[];
+  conversation?: Array<{ role: string; content: string }>;
+}
+
 export default function ReportPage() {
-  const [report, setReport] = useState<any>(null);
+  const router = useRouter();
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  // Convert text scores to numbers
+  const scoreToNumber = (score: number | string): number => {
+    if (typeof score === 'number') return Math.min(10, Math.max(0, score));
+    const scoreMap: Record<string, number> = {
+      'excellent': 9, 'very_good': 8, 'good': 7, 'above_average': 6.5,
+      'average': 6, 'below_average': 5, 'fair': 4, 'poor': 3,
+      'very_poor': 2, 'very_low': 2, 'inconsistent': 4, 'not_assessed': 0,
+    };
+    const key = String(score).toLowerCase().replace(/\s+/g, '_').replace(/[^a-z_]/g, '');
+    if (scoreMap[key] !== undefined) return scoreMap[key];
+    const num = parseFloat(String(score));
+    return isNaN(num) ? 5 : Math.min(10, Math.max(0, num));
+  };
 
   useEffect(() => {
-    const interviewId = sessionStorage.getItem("interviewId");
-    if (!interviewId) return;
+    const id = sessionStorage.getItem("interviewId");
+    if (!id) { router.push("/interview"); return; }
 
-    analyzeInterview(interviewId).then(setReport);
-  }, []);
+    fetch(`http://127.0.0.1:8000/api/analyze-interview?interview_id=${id}`, { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => { setReport(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [router]);
 
-  if (!report) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-2xl shadow-2xl">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="text-lg font-medium text-gray-700">
-              Generating interview insights…
-            </span>
-          </div>
+      <div className="h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-white text-sm">Analyzing...</p>
         </div>
       </div>
     );
   }
 
+  if (!report) {
+    return (
+      <div className="h-screen bg-slate-900 flex items-center justify-center">
+        <p className="text-red-400">Failed to load report</p>
+      </div>
+    );
+  }
+
+  const overallScore = scoreToNumber(report.overall_score);
+  const metrics = [
+    { label: "Fluency", value: scoreToNumber(report.fluency) },
+    { label: "Grammar", value: scoreToNumber(report.grammar) },
+    { label: "Technical", value: scoreToNumber(report.technical_depth) },
+    { label: "Confidence", value: scoreToNumber(report.confidence) },
+    { label: "Clarity", value: scoreToNumber(report.clarity) },
+    { label: "Pace", value: scoreToNumber(report.response_pace) },
+  ];
+
+  // Extract Q&A from conversation if available
+  const qaFeedback: QAFeedback[] = report.qa_feedback || [];
+  if (qaFeedback.length === 0 && report.conversation) {
+    for (let i = 0; i < report.conversation.length - 1; i++) {
+      if (report.conversation[i].role === 'assistant' && report.conversation[i + 1]?.role === 'user') {
+        qaFeedback.push({
+          question: report.conversation[i].content,
+          user_answer: report.conversation[i + 1].content,
+        });
+      }
+    }
+  }
+
+  const getColor = (s: number) => s >= 7 ? "#22c55e" : s >= 5 ? "#eab308" : "#ef4444";
+
+  // Radar Chart Component
+  const RadarChart = () => {
+    const size = 200;
+    const center = size / 2;
+    const radius = 70;
+    const levels = 5;
+
+    const angleStep = (2 * Math.PI) / metrics.length;
+    const startAngle = -Math.PI / 2;
+
+    // Create points for each metric
+    const points = metrics.map((m, i) => {
+      const angle = startAngle + i * angleStep;
+      const r = (m.value / 10) * radius;
+      return {
+        x: center + r * Math.cos(angle),
+        y: center + r * Math.sin(angle),
+        labelX: center + (radius + 25) * Math.cos(angle),
+        labelY: center + (radius + 25) * Math.sin(angle),
+        label: m.label,
+        value: m.value,
+      };
+    });
+
+    const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
+
+    return (
+      <svg width={size} height={size} className="mx-auto">
+        {/* Background levels */}
+        {[...Array(levels)].map((_, i) => {
+          const r = ((i + 1) / levels) * radius;
+          const levelPoints = metrics.map((_, j) => {
+            const angle = startAngle + j * angleStep;
+            return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
+          }).join(' ');
+          return (
+            <polygon
+              key={i}
+              points={levelPoints}
+              fill="none"
+              stroke="#334155"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* Axis lines */}
+        {metrics.map((_, i) => {
+          const angle = startAngle + i * angleStep;
+          return (
+            <line
+              key={i}
+              x1={center}
+              y1={center}
+              x2={center + radius * Math.cos(angle)}
+              y2={center + radius * Math.sin(angle)}
+              stroke="#334155"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {/* Data polygon */}
+        <polygon
+          points={polygonPoints}
+          fill="rgba(59, 130, 246, 0.3)"
+          stroke="#3b82f6"
+          strokeWidth="2"
+        />
+
+        {/* Data points */}
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="4" fill={getColor(p.value)} />
+        ))}
+
+        {/* Labels */}
+        {points.map((p, i) => (
+          <text
+            key={i}
+            x={p.labelX}
+            y={p.labelY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            className="fill-gray-400 text-[10px]"
+          >
+            {p.label}
+          </text>
+        ))}
+      </svg>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* REPORT HEADER - Full Width */}
-      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-purple-700 text-white py-16 px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <div className="inline-block px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-medium mb-4">
-                AI-Powered Analysis
-              </div>
-              <h1 className="text-5xl md:text-6xl font-bold mb-4">
-                Interview Performance Report
-              </h1>
-              <p className="text-xl text-blue-100">
-                Comprehensive AI-driven evaluation of your interview performance
-              </p>
-            </div>
-          </div>
-          
-          {/* Report Meta Info */}
-          <div className="flex items-center gap-6 text-sm text-blue-100 mt-8">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Analysis Complete
-            </div>
-          </div>
+    <div className="min-h-[calc(100vh-56px)] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h1 className="text-lg font-bold text-white">Interview Report</h1>
+        <div className="flex gap-2">
+          <Link href="/interview" className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg">New</Link>
+          <Link href="/dashboard" className="px-3 py-1 bg-slate-700 text-white text-xs rounded-lg">Dashboard</Link>
         </div>
       </div>
 
-      {/* MAIN REPORT CONTENT */}
-      <div className="max-w-7xl mx-auto px-8 -mt-8">
+      {/* Main Content */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
         
-        {/* OVERALL SCORE CARD */}
-        <div className="bg-white rounded-2xl shadow-xl p-10 mb-8 border-t-4 border-blue-600">
-          <div className="grid md:grid-cols-[1fr_300px] gap-12 items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">Overall Performance</h2>
-              <p className="text-gray-600 mb-6">
-                Your interview performance has been evaluated across multiple dimensions including communication, 
-                technical knowledge, and professional presentation. Below is your comprehensive score.
-              </p>
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-1000"
-                    style={{ width: `${(report.overall_score / 10) * 100}%` }}
-                  />
-                </div>
-                <span className="text-2xl font-bold text-gray-700">{report.overall_score}/10</span>
-              </div>
-            </div>
-            <div className="flex justify-center">
-              <CircleScore
-                label="Overall Score"
-                value={report.overall_score}
-                size={200}
-              />
-            </div>
+        {/* Left: Radar Chart + Score */}
+        <div className="lg:col-span-4 bg-slate-800/60 rounded-xl p-4 flex flex-col items-center justify-center min-h-[400px]">
+          <RadarChart />
+          <div className="text-center mt-2">
+            <span className={`text-3xl font-bold ${overallScore >= 7 ? "text-green-400" : overallScore >= 5 ? "text-yellow-400" : "text-red-400"}`}>
+              {overallScore.toFixed(1)}
+            </span>
+            <span className="text-gray-400 text-sm">/10</span>
           </div>
+          <p className="text-gray-400 text-xs">Overall Score</p>
+          <span className={`mt-1 px-2 py-0.5 rounded-full text-xs ${overallScore >= 7 ? "bg-green-500/20 text-green-400" : overallScore >= 5 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
+            {report.job_readiness || (overallScore >= 7 ? "Ready" : overallScore >= 5 ? "Developing" : "Needs Practice")}
+          </span>
         </div>
 
-        {/* PERFORMANCE METRICS */}
-        <div className="bg-white rounded-2xl shadow-xl p-10 mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-8">Performance Metrics</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
-            {[
-              { label: "Fluency", value: report.fluency },
-              { label: "Grammar", value: report.grammar },
-              { label: "Technical Depth", value: report.technical_depth },
-              { label: "Confidence", value: report.confidence },
-              { label: "Clarity", value: report.clarity },
-              { label: "Response Pace", value: report.response_pace },
-            ].map((metric) => (
-              <div key={metric.label} className="flex justify-center">
-                <CircleScore label={metric.label} value={metric.value} size={120} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* DETAILED ANALYSIS */}
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
-          
-          {/* Strengths */}
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-8 py-6">
-              <div className="flex items-center gap-3 text-white">
-                <div className="bg-white/20 rounded-full p-2">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-bold">Key Strengths</h3>
-              </div>
+        {/* Right: Feedback */}
+        <div className="lg:col-span-8 flex flex-col gap-4 min-h-[400px]">
+          {/* Strengths & Weaknesses Row */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Strengths */}
+            <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
+              <h4 className="text-green-400 font-semibold text-xs mb-2">✓ Strengths</h4>
+              <ul className="space-y-1">
+                {(report.strengths || []).slice(0, 2).map((s, i) => (
+                  <li key={i} className="text-gray-300 text-xs leading-tight">{s}</li>
+                ))}
+              </ul>
             </div>
-            <div className="p-8">
-              <ul className="space-y-4">
-                {report.strengths.map((s: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-3">
-                    <div className="mt-1 flex-shrink-0 w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <span className="text-gray-700 flex-1">{s}</span>
-                  </li>
+            {/* Weaknesses */}
+            <div className="bg-orange-500/10 rounded-xl p-3 border border-orange-500/20">
+              <h4 className="text-orange-400 font-semibold text-xs mb-2">⚠ Improve</h4>
+              <ul className="space-y-1">
+                {(report.weaknesses || []).slice(0, 2).map((w, i) => (
+                  <li key={i} className="text-gray-300 text-xs leading-tight">{w}</li>
                 ))}
               </ul>
             </div>
           </div>
 
-          {/* Areas to Improve */}
-          <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-            <div className="bg-gradient-to-r from-orange-500 to-red-600 px-8 py-6">
-              <div className="flex items-center gap-3 text-white">
-                <div className="bg-white/20 rounded-full p-2">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-bold">Areas for Improvement</h3>
-              </div>
-            </div>
-            <div className="p-8">
-              <ul className="space-y-4">
-                {report.weaknesses.map((w: string, idx: number) => (
-                  <li key={idx} className="flex items-start gap-3">
-                    <div className="mt-1 flex-shrink-0 w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <span className="text-gray-700 flex-1">{w}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* ACTIONABLE RECOMMENDATIONS */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-8 py-6">
-            <div className="flex items-center gap-3 text-white">
-              <div className="bg-white/20 rounded-full p-2">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold">Actionable Recommendations</h3>
-            </div>
-          </div>
-          <div className="p-8">
-            <p className="text-gray-600 mb-6">
-              Based on your performance analysis, here are specific recommendations to enhance your interview skills:
-            </p>
-            <div className="space-y-4">
-              {report.recommendations.map((r: string, idx: number) => (
-                <div key={idx} className="flex items-start gap-4 p-4 bg-blue-50 rounded-lg border-l-4 border-blue-600">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">
-                    {idx + 1}
-                  </div>
-                  <span className="text-gray-700 flex-1 pt-1">{r}</span>
+          {/* Suggestions */}
+          <div className="bg-blue-500/10 rounded-xl p-3 border border-blue-500/20">
+            <h4 className="text-blue-400 font-semibold text-xs mb-2">💡 Suggestions</h4>
+            <div className="grid grid-cols-3 gap-2">
+              {(report.recommendations || []).slice(0, 3).map((r, i) => (
+                <div key={i} className="flex items-start gap-1 bg-slate-800/50 rounded p-2">
+                  <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400 text-[10px] flex-shrink-0">{i + 1}</span>
+                  <span className="text-gray-300 text-[10px] leading-tight">{r}</span>
                 </div>
               ))}
             </div>
           </div>
-        </div>
 
-        {/* JOB READINESS ASSESSMENT */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-700 rounded-2xl shadow-xl p-10 mb-12 text-white text-center">
-          <h3 className="text-2xl font-bold mb-3">Job Readiness Assessment</h3>
-          <div className="inline-block bg-white/20 backdrop-blur-sm px-8 py-4 rounded-xl">
-            <p className="text-3xl font-bold">{report.job_readiness}</p>
+          {/* Question Feedback (Collapsible) */}
+          <div className="flex-1 bg-slate-800/60 rounded-xl border border-slate-700/50 flex flex-col min-h-[150px]">
+            <button
+              onClick={() => setShowFeedback(!showFeedback)}
+              className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-700/30 transition"
+            >
+              <span className="text-white font-semibold text-xs">📝 Question-by-Question Feedback</span>
+              <span className="text-gray-400 text-xs">{showFeedback ? "▲" : "▼"}</span>
+            </button>
+            
+            {showFeedback && (
+              <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-3">
+                {qaFeedback.length > 0 ? qaFeedback.slice(0, 5).map((qa, i) => (
+                  <div key={i} className="bg-slate-700/30 rounded-lg p-2">
+                    <p className="text-blue-400 text-[10px] font-medium mb-1">Q{i + 1}: {qa.question.slice(0, 100)}...</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-red-500/10 rounded p-1.5 border border-red-500/20">
+                        <p className="text-red-400 text-[9px] font-medium mb-0.5">Your Answer:</p>
+                        <p className="text-gray-300 text-[10px]">{qa.user_answer.slice(0, 80)}...</p>
+                      </div>
+                      <div className="bg-green-500/10 rounded p-1.5 border border-green-500/20">
+                        <p className="text-green-400 text-[9px] font-medium mb-0.5">Better Answer:</p>
+                        <p className="text-gray-300 text-[10px]">
+                          {qa.better_answer?.slice(0, 80) || "Provide more detail using STAR method..."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )) : (
+                  <p className="text-gray-500 text-xs text-center py-4">No Q&A feedback available</p>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* FOOTER */}
-        <div className="text-center py-8 text-gray-500 text-sm border-t border-gray-200">
-          <p>Generated by AI Interview Bot • Confidential Report • {new Date().getFullYear()}</p>
         </div>
       </div>
 
-      <style jsx>{`
-        @keyframes fade-in {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `}</style>
+      {/* Footer */}
+      <p className="text-center text-gray-600 text-[10px] mt-3">AI Interview Bot • {new Date().toLocaleDateString()}</p>
     </div>
   );
 }

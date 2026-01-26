@@ -186,7 +186,7 @@ export default function CareerDetailPage() {
   if (!career) {
     return (
       <div className="text-center py-12">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Career Not Found</h1>
+        <h1 className="text-2xl font-bold text-white mb-4">Career Not Found</h1>
         <Link href="/careers" className="text-blue-600 hover:underline">
           ← Back to Careers
         </Link>
@@ -229,7 +229,7 @@ export default function CareerDetailPage() {
       {/* Back Button */}
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 transition-colors"
+        className="flex items-center gap-2 text-white-300 hover:text-white mb-6 transition-colors"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -240,16 +240,16 @@ export default function CareerDetailPage() {
       {/* Hero Section */}
       <div className={`bg-gradient-to-r ${colors.gradient} rounded-3xl p-12 text-white mb-8 shadow-2xl`}>
         <div className="flex items-center gap-6 mb-6">
-          <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl flex items-center justify-center text-5xl shadow-xl">
+          <div className="w-24 h-24 bg-slate-800/50/20 backdrop-blur-sm rounded-3xl flex items-center justify-center text-5xl shadow-xl">
             {career.icon}
           </div>
           <div>
             <h1 className="text-5xl font-bold mb-2">{career.title}</h1>
             <div className="flex gap-3">
-              <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-medium">
+              <span className="px-4 py-1.5 bg-slate-800/50/20 backdrop-blur-sm rounded-full text-sm font-medium">
                 💰 {career.salary}
               </span>
-              <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-sm font-medium">
+              <span className="px-4 py-1.5 bg-slate-800/50/20 backdrop-blur-sm rounded-full text-sm font-medium">
                 🔥 Demand: {career.demand}
               </span>
             </div>
@@ -266,14 +266,14 @@ export default function CareerDetailPage() {
         <div className="md:col-span-2 space-y-8">
           
           {/* Tech Stack */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+          <div className="bg-slate-800/50 rounded-2xl shadow-sm border border-slate-700/50 p-8">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <span className="text-3xl">🛠️</span>
               Tech Stack
             </h2>
             <div className="grid sm:grid-cols-2 gap-3">
               {career.techStack.map((tech: string, idx: number) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <div key={idx} className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg">
                   <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
@@ -284,8 +284,8 @@ export default function CareerDetailPage() {
           </div>
 
           {/* Responsibilities */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+          <div className="bg-slate-800/50 rounded-2xl shadow-sm border border-slate-700/50 p-8">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <span className="text-3xl">💼</span>
               Key Responsibilities
             </h2>
@@ -300,8 +300,8 @@ export default function CareerDetailPage() {
           </div>
 
           {/* Interview Questions */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+          <div className="bg-slate-800/50 rounded-2xl shadow-sm border border-slate-700/50 p-8">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
               <span className="text-3xl">❓</span>
               Sample Interview Questions
             </h2>
@@ -321,8 +321,8 @@ export default function CareerDetailPage() {
         <div className="space-y-6">
           
           {/* Career Path */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-slate-800/50 rounded-2xl shadow-sm border border-slate-700/50 p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-2xl">📈</span>
               Career Path
             </h3>
@@ -339,8 +339,8 @@ export default function CareerDetailPage() {
           </div>
 
           {/* Learning Resources */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-slate-800/50 rounded-2xl shadow-sm border border-slate-700/50 p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <span className="text-2xl">📚</span>
               Learning Resources
             </h3>
