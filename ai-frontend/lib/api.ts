@@ -4,20 +4,17 @@
  * Centralized API for AI Interview Bot
  */
 
-// ======================
-// BASE URL - Change this for different environments
-// ======================
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { API_URL } from "./config";
 
 // ======================
-// RESUME ENDPOINTS (Existing)
+// RESUME ENDPOINTS
 // ======================
 
 export async function uploadResume(file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}/upload-resume`, {
+  const res = await fetch(`${API_URL}/api/upload-resume`, {
     method: "POST",
     body: formData,
   });
@@ -26,7 +23,7 @@ export async function uploadResume(file: File) {
 }
 
 export async function generateQuestions(parsedResume: any) {
-  const res = await fetch(`${API_BASE}/generate-questions`, {
+  const res = await fetch(`${API_URL}/api/generate-questions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ parsed_resume: parsedResume }),
@@ -36,11 +33,11 @@ export async function generateQuestions(parsedResume: any) {
 }
 
 // ======================
-// LEGACY INTERVIEW ENDPOINTS (Existing - Old Q&A style)
+// LEGACY INTERVIEW ENDPOINTS
 // ======================
 
 export async function startInterview(questions: any) {
-  const res = await fetch(`${API_BASE}/start-interview`, {
+  const res = await fetch(`${API_URL}/api/start-interview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(questions),
@@ -51,7 +48,7 @@ export async function startInterview(questions: any) {
 
 export async function submitAnswer(interviewId: string, answer: string) {
   const res = await fetch(
-    `${API_BASE}/submit-answer?interview_id=${interviewId}&answer=${encodeURIComponent(answer)}`,
+    `${API_URL}/api/submit-answer?interview_id=${interviewId}&answer=${encodeURIComponent(answer)}`,
     { method: "POST" }
   );
 
@@ -60,7 +57,7 @@ export async function submitAnswer(interviewId: string, answer: string) {
 
 export async function analyzeInterview(interviewId: string) {
   const res = await fetch(
-    `${API_BASE}/analyze-interview?interview_id=${interviewId}`,
+    `${API_URL}/api/analyze-interview?interview_id=${interviewId}`,
     { method: "POST" }
   );
 
@@ -68,7 +65,7 @@ export async function analyzeInterview(interviewId: string) {
 }
 
 // ======================
-// NEW CONVERSATIONAL INTERVIEW - TYPES
+// CONVERSATIONAL INTERVIEW - TYPES
 // ======================
 
 export interface InterviewMessage {
@@ -121,7 +118,7 @@ export interface EndInterviewResponse {
 }
 
 // ======================
-// NEW CONVERSATIONAL INTERVIEW - FUNCTIONS
+// CONVERSATIONAL INTERVIEW - FUNCTIONS
 // ======================
 
 /**
@@ -137,7 +134,7 @@ export async function startConversationalInterview(request: {
   max_questions?: number;
   max_duration_mins?: number;
 }): Promise<StartInterviewResponse> {
-  const res = await fetch(`${API_BASE}/interview/start`, {
+  const res = await fetch(`${API_URL}/api/interview/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -160,7 +157,7 @@ export async function respondToInterview(
   answer: string,
   answerDurationSeconds?: number
 ): Promise<RespondResponse> {
-  const res = await fetch(`${API_BASE}/interview/respond`, {
+  const res = await fetch(`${API_URL}/api/interview/respond`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -187,7 +184,7 @@ export async function endConversationalInterview(
   userId: number,
   reason: "user_ended" | "time_limit" | "completed" = "user_ended"
 ): Promise<EndInterviewResponse> {
-  const res = await fetch(`${API_BASE}/interview/end`, {
+  const res = await fetch(`${API_URL}/api/interview/end`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -210,7 +207,7 @@ export async function endConversationalInterview(
  */
 export async function getInterviewStatus(interviewId: string, userId: number) {
   const res = await fetch(
-    `${API_BASE}/interview/${interviewId}/status?user_id=${userId}`,
+    `${API_URL}/api/interview/${interviewId}/status?user_id=${userId}`,
     { method: "GET" }
   );
 
@@ -227,7 +224,7 @@ export async function getInterviewStatus(interviewId: string, userId: number) {
  */
 export async function getInterviewHistory(interviewId: string, userId: number) {
   const res = await fetch(
-    `${API_BASE}/interview/${interviewId}/history?user_id=${userId}`,
+    `${API_URL}/api/interview/${interviewId}/history?user_id=${userId}`,
     { method: "GET" }
   );
 

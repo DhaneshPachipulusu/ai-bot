@@ -1,3 +1,9 @@
+"""
+Utility Prompts
+===============
+Prompts for resume parsing and question generation.
+"""
+
 RESUME_PARSE_PROMPT = """
 You MUST return only valid JSON.
 Do NOT add explanations, markdown, or text.
@@ -13,6 +19,7 @@ Extract:
 
 Resume text:
 """
+
 QUESTION_GENERATION_PROMPT = """
 You are an experienced technical interviewer.
 

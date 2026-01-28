@@ -18,7 +18,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   if (isFullscreen) {
     return <>{children}</>;
   }
-
+  
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/careers", label: "Careers" },
@@ -86,7 +86,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   </div>
                   <div className="text-left hidden sm:block">
                     <p className="text-sm font-semibold text-white">{user?.username || "User"}</p>
-                    <p className="text-xs text-gray-400">{user?.college || "College"}</p>
                   </div>
                   <svg 
                     className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} 

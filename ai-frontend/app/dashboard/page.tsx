@@ -46,14 +46,14 @@ export default function DashboardPage() {
     : 0;
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full mx-auto">
       
       {/* Welcome Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2">
           Welcome back, <span className="text-blue-400">{user.username}</span>!
         </h1>
-        <p className="text-gray-400">{user.college}</p>
+        
       </div>
 
       {/* Stats Cards */}

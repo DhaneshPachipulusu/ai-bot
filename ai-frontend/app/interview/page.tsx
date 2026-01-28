@@ -53,7 +53,7 @@ export default function InterviewSetupPage() {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const response = await fetch("http://127.0.0.1:8000/api/parse-resume", {
+      const response = await fetch("http://127.0.0.1:8000/api/upload-resume", {
         method: "POST",
         body: formData,
       });

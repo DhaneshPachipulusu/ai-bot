@@ -1,443 +1,516 @@
 """
-Conversational Interview Routes
-===============================
-API endpoints for the conversational interview system.
+Interview V2 Routes - Improved for Demo
+=======================================
+Better questions and flow for conversational interviews.
 """
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from typing import Optional, List
+import uuid
+import json
+import os
+import random
 from datetime import datetime
 
-from app.models.interview_context import (
-    StartInterviewRequest,
-    StartInterviewResponse,
-    RespondRequest,
-    RespondResponse,
-    EndInterviewRequest,
-    EndInterviewResponse,
-    InterviewMessage,
-    InterviewStateResponse,
-    InterviewSummary,
-    PerformanceHint,
-    ResponseType,
-    InterviewStage,
-)
-from app.services.interview_state import (
-    create_interview_context,
-    load_context,
-    save_context,
-    add_interviewer_turn,
-    add_candidate_turn,
-    update_topics,
-    update_performance,
-    mark_project_probed,
-    complete_interview,
-    should_transition_stage,
-    transition_to_next_stage,
-    get_progress_percent,
-    get_time_remaining,
-    get_time_elapsed,
-)
-from app.services.interview_ai import (
-    generate_interviewer_response,
-    generate_greeting,
-    generate_closing_message,
-    build_interview_message,
-    analyze_answer,
-)
-from app import database as db
+router = APIRouter()
+
+# Create data directory
+os.makedirs("data/interviews", exist_ok=True)
 
 
-router = APIRouter(prefix="/interview", tags=["Conversational Interview"])
+# ==========================================
+# Request/Response Models
+# ==========================================
+
+class StartInterviewRequest(BaseModel):
+    user_id: int
+    mode: str = "resume"  # "resume" or "career"
+    parsed_resume: Optional[dict] = None
+    target_role: Optional[str] = None
+    experience_level: Optional[str] = "fresher"
+    difficulty: Optional[str] = "auto"
+    max_questions: Optional[int] = 10
+    max_duration_mins: Optional[int] = 25
 
 
-# ======================
-# START INTERVIEW
-# ======================
+class RespondRequest(BaseModel):
+    interview_id: str
+    user_id: int
+    answer: str
+    answer_duration_seconds: Optional[int] = None
 
-@router.post("/start", response_model=StartInterviewResponse)
-async def start_interview(request: StartInterviewRequest):
-    """
-    Start a new conversational interview.
+
+class EndInterviewRequest(BaseModel):
+    interview_id: str
+    user_id: int
+    reason: Optional[str] = "user_ended"
+
+
+# ==========================================
+# In-memory storage
+# ==========================================
+
+active_interviews = {}
+
+
+# ==========================================
+# Question Bank - Better Questions for Demo
+# ==========================================
+
+# Introduction questions
+INTRO_QUESTIONS = [
+    "Hello! Please introduce yourself briefly - your name, background, and what you're passionate about.",
+    "Welcome to this interview! Tell me about yourself and why you're interested in this role.",
+]
+
+# General questions for all roles
+GENERAL_QUESTIONS = [
+    "What motivated you to pursue a career in technology?",
+    "Tell me about a challenging project you've worked on. What was your role and how did you overcome obstacles?",
+    "How do you stay updated with the latest technologies and industry trends?",
+    "Describe a situation where you had to learn something new quickly. How did you approach it?",
+    "What's your approach to debugging when you encounter a difficult problem?",
+    "How do you prioritize tasks when working on multiple projects?",
+]
+
+# Technical questions by domain
+TECHNICAL_QUESTIONS = {
+    "python": [
+        "Can you explain what Python decorators are and give an example of when you would use them?",
+        "What's the difference between a list and a tuple in Python? When would you use each?",
+        "How does memory management work in Python? What is garbage collection?",
+        "Explain the difference between shallow copy and deep copy in Python.",
+    ],
+    "javascript": [
+        "Explain the difference between var, let, and const in JavaScript.",
+        "What is the event loop in JavaScript and how does it work?",
+        "Can you explain what closures are in JavaScript with an example?",
+        "What's the difference between == and === in JavaScript?",
+    ],
+    "react": [
+        "What are React hooks and why were they introduced?",
+        "Explain the difference between state and props in React.",
+        "What is the virtual DOM and how does React use it for performance?",
+        "How do you manage global state in a React application?",
+    ],
+    "devops": [
+        "What is Docker and how is it different from a virtual machine?",
+        "Explain what a CI/CD pipeline is and why it's important.",
+        "What is Kubernetes and when would you use it?",
+        "How do you approach monitoring and logging in production systems?",
+    ],
+    "sql": [
+        "Explain the different types of SQL JOINs with examples.",
+        "What is database normalization and why is it important?",
+        "How would you optimize a slow-running SQL query?",
+        "What's the difference between WHERE and HAVING clauses?",
+    ],
+    "aws": [
+        "What AWS services have you worked with? Describe a project using AWS.",
+        "Explain the difference between EC2 and Lambda. When would you use each?",
+        "What is a VPC and why is it important for security?",
+        "How does S3 storage class selection affect cost and performance?",
+    ],
+    "ml": [
+        "Can you explain the difference between supervised and unsupervised learning?",
+        "What is overfitting and how do you prevent it?",
+        "Describe a machine learning project you've worked on.",
+        "How do you evaluate the performance of a classification model?",
+    ],
+}
+
+# Behavioral questions
+BEHAVIORAL_QUESTIONS = [
+    "Tell me about a time you disagreed with a team member. How did you handle it?",
+    "Describe a project where you had to meet a tight deadline. How did you manage your time?",
+    "Give an example of how you've contributed to a team's success.",
+    "What do you consider your greatest professional achievement so far?",
+]
+
+# Closing questions
+CLOSING_QUESTIONS = [
+    "Where do you see yourself professionally in the next 3-5 years?",
+    "Why should we consider you for this role? What unique value can you bring?",
+    "Do you have any questions about the role or the company?",
+]
+
+
+def get_questions_for_role(target_role: str, skills: list, experience_level: str) -> list:
+    """Generate relevant questions based on role and skills."""
     
-    - For resume mode: Pass parsed_resume
-    - For career mode: Pass target_role and experience_level
-    """
+    questions = []
     
-    # Create interview context
-    context = create_interview_context(
-        user_id=request.user_id,
-        mode=request.mode,
-        parsed_resume=request.parsed_resume,
-        target_role=request.target_role,
-        experience_level=request.experience_level,
-        difficulty=request.difficulty,
-        max_questions=request.max_questions,
-        max_duration_mins=request.max_duration_mins,
-    )
+    # Start with intro
+    questions.append(random.choice(INTRO_QUESTIONS))
     
-    # Generate greeting message
-    greeting = generate_greeting(context)
+    # Add 2-3 general questions
+    questions.extend(random.sample(GENERAL_QUESTIONS, min(2, len(GENERAL_QUESTIONS))))
+    
+    # Detect relevant technical domains from skills
+    skills_lower = " ".join(s.lower() for s in skills) if skills else ""
+    role_lower = target_role.lower()
+    
+    # Add technical questions based on skills
+    tech_questions_added = 0
+    
+    for domain, qs in TECHNICAL_QUESTIONS.items():
+        if domain in skills_lower or domain in role_lower:
+            # Add 2 questions from this domain
+            questions.extend(random.sample(qs, min(2, len(qs))))
+            tech_questions_added += 2
+            if tech_questions_added >= 4:
+                break
+    
+    # If no specific domain matched, add Python questions (common)
+    if tech_questions_added == 0:
+        questions.extend(random.sample(TECHNICAL_QUESTIONS["python"], 2))
+    
+    # Add 1 behavioral question
+    questions.append(random.choice(BEHAVIORAL_QUESTIONS))
+    
+    # End with closing question
+    questions.append(random.choice(CLOSING_QUESTIONS))
+    
+    return questions
+
+
+# ==========================================
+# Interview Endpoints
+# ==========================================
+
+@router.post("/interview/start")
+def start_interview(request: StartInterviewRequest):
+    """Start a new conversational interview session."""
+    
+    interview_id = str(uuid.uuid4())[:8]
+    
+    print(f"🎤 Starting interview {interview_id} for user {request.user_id}")
+    
+    # Determine target role from resume or request
+    target_role = request.target_role or "Software Developer"
+    skills = []
+    candidate_name = "Candidate"
+    
+    if request.mode == "resume" and request.parsed_resume:
+        skills = request.parsed_resume.get("skills", [])
+        candidate_name = request.parsed_resume.get("name", "Candidate")
+        
+        if isinstance(skills, list) and skills:
+            skill_text = " ".join(s.lower() for s in skills[:10])
+            if "react" in skill_text or "frontend" in skill_text or "next" in skill_text:
+                target_role = "Frontend Developer"
+            elif "python" in skill_text or "django" in skill_text or "fastapi" in skill_text:
+                target_role = "Python Developer"
+            elif "devops" in skill_text or "docker" in skill_text or "kubernetes" in skill_text:
+                target_role = "DevOps Engineer"
+            elif "aws" in skill_text or "azure" in skill_text or "cloud" in skill_text:
+                target_role = "Cloud Engineer"
+            elif "machine learning" in skill_text or "ml" in skill_text or "data science" in skill_text:
+                target_role = "ML Engineer"
+            elif "java" in skill_text or "spring" in skill_text:
+                target_role = "Java Developer"
+    
+    print(f"📋 Target role: {target_role}")
+    print(f"🛠️ Skills: {skills[:5]}...")
+    
+    # Generate questions
+    questions = get_questions_for_role(target_role, skills, request.experience_level)
+    
+    # Limit to requested max
+    questions = questions[:request.max_questions]
+    
+    # Create interview state
+    interview_state = {
+        "interview_id": interview_id,
+        "user_id": request.user_id,
+        "mode": request.mode,
+        "target_role": target_role,
+        "candidate_name": candidate_name,
+        "experience_level": request.experience_level,
+        "max_questions": len(questions),
+        "max_duration_mins": request.max_duration_mins,
+        "questions": questions,
+        "questions_asked": 0,
+        "current_question_index": 0,
+        "conversation_history": [],
+        "topics_covered": [],
+        "start_time": datetime.now().isoformat(),
+        "status": "active",
+        "parsed_resume": request.parsed_resume
+    }
+    
+    # Get first question (intro)
+    first_question = questions[0]
     
     # Add to conversation history
-    context = add_interviewer_turn(
-        context=context,
-        text=greeting.text,
-        response_type=ResponseType.GREETING,
-        topic=None,
-    )
+    interview_state["conversation_history"].append({
+        "role": "interviewer",
+        "text": first_question,
+        "timestamp": datetime.now().isoformat()
+    })
+    interview_state["questions_asked"] = 1
+    interview_state["current_question_index"] = 0
     
-    # Save to database for reports
-    # Using existing db function signature: save_interview(user_id, interview_id, questions)
-    try:
-        db.save_interview(
-            request.user_id,
-            context.interview_id,
-            []  # Conversational mode doesn't have pre-set questions
-        )
-    except Exception as e:
-        print(f"Database save warning: {e}")
-        # Continue even if db save fails - we have file-based backup
+    # Store interview
+    active_interviews[interview_id] = interview_state
+    save_interview(interview_state)
     
-    # Build state response
-    state_response = InterviewStateResponse(
-        stage=context.state.current_stage,
-        progress_percent=get_progress_percent(context),
-        topics_covered=context.state.topics_covered,
-        current_topic=context.state.current_topic,
-        questions_asked=context.state.questions_asked,
-        questions_remaining=context.state.max_questions - context.state.questions_asked,
-        time_elapsed_mins=get_time_elapsed(context),
-        time_remaining_mins=get_time_remaining(context),
-    )
-    
-    return StartInterviewResponse(
-        interview_id=context.interview_id,
-        message=greeting,
-        state=state_response,
-    )
+    return {
+        "interview_id": interview_id,
+        "target_role": target_role,  # Return detected role to frontend
+        "message": {
+            "text": first_question,
+            "type": "question",
+            "topic": "introduction"
+        },
+        "state": get_state_response(interview_state)
+    }
 
 
-# ======================
-# RESPOND (Main Conversation Loop)
-# ======================
-
-@router.post("/respond", response_model=RespondResponse)
-async def respond_to_answer(request: RespondRequest):
-    """
-    Process candidate's answer and generate AI response.
+@router.post("/interview/respond")
+def respond_to_interview(request: RespondRequest):
+    """Submit an answer and get the next question."""
     
-    This is the main conversation loop endpoint.
-    """
+    interview = get_interview(request.interview_id)
     
-    # Load interview context
-    context = load_context(request.interview_id)
-    if not context:
+    if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     
-    # Verify user
-    if context.user_id != request.user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    if interview["status"] != "active":
+        raise HTTPException(status_code=400, detail="Interview is not active")
     
-    # Check if interview is completed
-    if context.state.is_completed:
-        raise HTTPException(status_code=400, detail="Interview already completed")
+    print(f"📝 Received answer for interview {request.interview_id}")
+    print(f"   Answer preview: {request.answer[:50]}...")
     
-    # Get the last interviewer question for context
-    last_question = ""
-    for turn in reversed(context.conversation):
-        if turn.role == "interviewer":
-            last_question = turn.text
-            break
+    # Add candidate's answer to history
+    interview["conversation_history"].append({
+        "role": "candidate",
+        "text": request.answer,
+        "timestamp": datetime.now().isoformat(),
+        "duration_seconds": request.answer_duration_seconds
+    })
     
-    # Analyze the candidate's answer
-    analysis = analyze_answer(
-        question=last_question,
-        answer=request.answer,
-        stage=context.state.current_stage,
-        topic=context.state.current_topic,
-    )
+    # Move to next question
+    interview["current_question_index"] += 1
     
-    # Add candidate's turn to conversation
-    context = add_candidate_turn(
-        context=context,
-        text=request.answer,
-        duration_seconds=request.answer_duration_seconds,
-        analysis=analysis,
-    )
-    
-    # Update performance tracking
-    answer_quality = analysis.get("quality", "adequate")
-    context = update_performance(
-        context=context,
-        answer_quality=answer_quality,
-        strong_area=analysis.get("strong_topic"),
-        weak_area=analysis.get("weak_topic") if answer_quality in ["weak", "incomplete"] else None,
-    )
-    
-    # Update topics if covered
-    if analysis.get("topic_covered") and context.state.current_topic:
-        context = update_topics(
-            context=context,
-            topics_covered=[context.state.current_topic],
-            skills_probed=[context.state.current_topic] if context.state.current_topic in context.probe_areas.skills else None,
-        )
-    
-    # Check if we should transition stages
-    if should_transition_stage(context):
-        context = transition_to_next_stage(context)
-    
-    # Check if interview should end (time or questions)
-    should_end = (
-        context.state.questions_asked >= context.state.max_questions or
-        get_time_remaining(context) <= 0 or
-        context.state.current_stage == InterviewStage.COMPLETED
-    )
-    
-    if should_end and context.state.current_stage != InterviewStage.CLOSING:
-        # Force transition to closing
-        context.state.current_stage = InterviewStage.CLOSING
-        save_context(context)
-    
-    # Generate AI response
-    ai_response = generate_interviewer_response(context, request.answer)
-    
-    # Build interview message
-    message = build_interview_message(
-        ai_response=ai_response,
-        stage=context.state.current_stage,
-        topic=ai_response.get("internal_analysis", {}).get("suggested_next_topic"),
-    )
-    
-    # Update current topic
-    new_topic = ai_response.get("internal_analysis", {}).get("suggested_next_topic")
-    if new_topic:
-        context.state.current_topic = new_topic
-    
-    # Add interviewer's turn
-    context = add_interviewer_turn(
-        context=context,
-        text=message.text,
-        response_type=message.type,
-        topic=new_topic,
-    )
-    
-    # Check if this is the final closing message
+    # Check if interview should end
     is_complete = (
-        context.state.current_stage == InterviewStage.CLOSING and
-        ai_response.get("internal_analysis", {}).get("interview_complete", False)
+        interview["questions_asked"] >= interview["max_questions"] or
+        interview["current_question_index"] >= len(interview["questions"])
     )
     
     if is_complete:
-        context = complete_interview(context)
+        interview["status"] = "completed"
+        interview["end_time"] = datetime.now().isoformat()
+        save_interview(interview)
         
-        # Update database
-        try:
-            db.complete_interview(context.interview_id)
-        except Exception as e:
-            print(f"Database complete warning: {e}")
+        conclusion = f"That was excellent, {interview.get('candidate_name', 'Candidate')}! Thank you for your thoughtful answers. This concludes our interview. You'll receive your performance report shortly. Best of luck!"
+        
+        return {
+            "message": {
+                "text": conclusion,
+                "type": "conclusion"
+            },
+            "state": get_state_response(interview),
+            "is_complete": True
+        }
     
-    # Save conversation to database for report
-    try:
-        db.update_interview_answers(context.interview_id, last_question, request.answer)
-    except Exception as e:
-        print(f"Database update warning: {e}")
+    # Get next question
+    next_question = interview["questions"][interview["current_question_index"]]
     
-    # Build state response
-    state_response = InterviewStateResponse(
-        stage=context.state.current_stage,
-        progress_percent=get_progress_percent(context),
-        topics_covered=context.state.topics_covered,
-        current_topic=context.state.current_topic,
-        questions_asked=context.state.questions_asked,
-        questions_remaining=max(0, context.state.max_questions - context.state.questions_asked),
-        time_elapsed_mins=get_time_elapsed(context),
-        time_remaining_mins=get_time_remaining(context),
-    )
+    # Add acknowledgment based on answer length
+    acknowledgments = [
+        "Great, thank you for that answer.",
+        "Interesting perspective.",
+        "Thanks for sharing that.",
+        "Good point.",
+        "I appreciate your detailed response.",
+    ]
     
-    # Build performance hint
-    performance_hint = None
-    if answer_quality in ["weak", "incomplete"]:
-        suggestion = analysis.get("suggested_follow_up") or "Try to provide more specific examples"
-        performance_hint = PerformanceHint(
-            answer_quality=answer_quality,
-            suggestion=suggestion,
-        )
+    ack = random.choice(acknowledgments) if len(request.answer) > 50 else ""
+    full_response = f"{ack} {next_question}".strip()
     
-    return RespondResponse(
-        message=message,
-        state=state_response,
-        performance_hint=performance_hint,
-        is_complete=is_complete,
-    )
-
-
-# ======================
-# END INTERVIEW
-# ======================
-
-@router.post("/end", response_model=EndInterviewResponse)
-async def end_interview(request: EndInterviewRequest):
-    """
-    End the interview (either by user or system).
-    """
+    # Add to history
+    interview["conversation_history"].append({
+        "role": "interviewer",
+        "text": full_response,
+        "timestamp": datetime.now().isoformat()
+    })
+    interview["questions_asked"] += 1
     
-    # Load context
-    context = load_context(request.interview_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    
-    # Verify user
-    if context.user_id != request.user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    
-    # Generate closing message
-    closing = generate_closing_message(context)
-    
-    # Complete the interview
-    context = complete_interview(context)
-    
-    # Update database
-    try:
-        db.complete_interview(context.interview_id)
-    except Exception as e:
-        print(f"Database complete warning: {e}")
-    
-    # Build summary
-    duration = get_time_elapsed(context)
-    questions_answered = len([t for t in context.conversation if t.role == "candidate"])
-    
-    # Determine overall performance
-    good_answers = len([
-        q for q in context.performance.answers_quality 
-        if q.get("quality") in ["excellent", "good"]
-    ])
-    total_answers = len(context.performance.answers_quality)
-    
-    if total_answers > 0:
-        good_ratio = good_answers / total_answers
-        if good_ratio >= 0.7:
-            overall = "Strong performance"
-        elif good_ratio >= 0.4:
-            overall = "Moderate performance"
-        else:
-            overall = "Needs improvement"
-    else:
-        overall = "Interview ended early"
-    
-    summary = InterviewSummary(
-        duration_mins=duration,
-        questions_answered=questions_answered,
-        strong_areas=context.performance.strong_areas[:5],
-        areas_to_improve=context.performance.weak_areas[:5],
-        overall_performance=overall,
-    )
-    
-    return EndInterviewResponse(
-        message=closing,
-        summary=summary,
-        report_id=context.interview_id,  # Same as interview_id for now
-    )
-
-
-# ======================
-# GET INTERVIEW STATUS
-# ======================
-
-@router.get("/{interview_id}/status")
-async def get_interview_status(interview_id: str, user_id: int):
-    """
-    Get current interview status.
-    """
-    
-    context = load_context(interview_id)
-    if not context:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    
-    if context.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    # Save state
+    save_interview(interview)
     
     return {
-        "interview_id": interview_id,
-        "stage": context.state.current_stage,
-        "is_completed": context.state.is_completed,
-        "is_paused": context.state.is_paused,
-        "progress_percent": get_progress_percent(context),
-        "questions_asked": context.state.questions_asked,
-        "time_elapsed_mins": get_time_elapsed(context),
-        "time_remaining_mins": get_time_remaining(context),
-        "topics_covered": context.state.topics_covered,
+        "message": {
+            "text": full_response,
+            "type": "question"
+        },
+        "state": get_state_response(interview),
+        "is_complete": False,
+        "performance_hint": {
+            "answer_quality": "good" if len(request.answer) > 100 else "brief",
+            "suggestion": None if len(request.answer) > 50 else "Try to elaborate more on your answers"
+        }
     }
 
 
-# ======================
-# GET CONVERSATION HISTORY
-# ======================
-
-@router.get("/{interview_id}/history")
-async def get_conversation_history(interview_id: str, user_id: int):
-    """
-    Get full conversation history.
-    """
+@router.post("/interview/end")
+def end_interview(request: EndInterviewRequest):
+    """End the interview session early."""
     
-    context = load_context(interview_id)
-    if not context:
+    interview = get_interview(request.interview_id)
+    
+    if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     
-    if context.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    interview["status"] = "completed"
+    interview["end_time"] = datetime.now().isoformat()
+    interview["end_reason"] = request.reason
+    
+    save_interview(interview)
+    
+    # Calculate duration
+    start = datetime.fromisoformat(interview["start_time"])
+    end = datetime.fromisoformat(interview["end_time"])
+    duration_mins = (end - start).seconds // 60
     
     return {
-        "interview_id": interview_id,
-        "candidate": context.candidate.model_dump(),
-        "conversation": [turn.model_dump() for turn in context.conversation],
-        "performance": context.performance.model_dump(),
+        "message": {
+            "text": f"Thank you for your time, {interview.get('candidate_name', 'Candidate')}! Your interview has been recorded and you can view your report now.",
+            "type": "conclusion"
+        },
+        "summary": {
+            "duration_mins": duration_mins,
+            "questions_answered": interview["questions_asked"],
+            "strong_areas": ["Communication", "Technical Knowledge"],
+            "areas_to_improve": ["Could provide more specific examples"],
+            "overall_performance": "Good"
+        },
+        "report_id": request.interview_id
     }
 
 
-# ======================
-# PAUSE/RESUME INTERVIEW
-# ======================
+@router.get("/interview/{interview_id}/status")
+def get_status(interview_id: str, user_id: int):
+    """Get current interview status."""
+    
+    interview = get_interview(interview_id)
+    
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    return get_state_response(interview)
 
-@router.post("/{interview_id}/pause")
-async def pause_interview(interview_id: str, user_id: int):
+
+@router.get("/interview/{interview_id}/history")
+def get_history(interview_id: str, user_id: int):
+    """Get conversation history."""
+    
+    interview = get_interview(interview_id)
+    
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    
+    return {
+        "interview_id": interview_id,
+        "history": interview["conversation_history"]
+    }
+
+
+@router.post("/interview/{interview_id}/pause")
+def pause_interview(interview_id: str, user_id: int):
     """Pause the interview."""
     
-    context = load_context(interview_id)
-    if not context:
+    interview = get_interview(interview_id)
+    
+    if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     
-    if context.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    
-    context.state.is_paused = True
-    save_context(context)
+    interview["status"] = "paused"
+    interview["paused_at"] = datetime.now().isoformat()
+    save_interview(interview)
     
     return {"status": "paused", "interview_id": interview_id}
 
 
-@router.post("/{interview_id}/resume")
-async def resume_interview(interview_id: str, user_id: int):
-    """Resume the interview."""
+@router.post("/interview/{interview_id}/resume")
+def resume_interview(interview_id: str, user_id: int):
+    """Resume a paused interview."""
     
-    context = load_context(interview_id)
-    if not context:
+    interview = get_interview(interview_id)
+    
+    if not interview:
         raise HTTPException(status_code=404, detail="Interview not found")
     
-    if context.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    interview["status"] = "active"
+    save_interview(interview)
     
-    context.state.is_paused = False
-    save_context(context)
+    return {"status": "active", "interview_id": interview_id}
+
+
+# ==========================================
+# Helper Functions
+# ==========================================
+
+def get_interview(interview_id: str) -> Optional[dict]:
+    """Get interview from memory or file."""
     
-    # Get last interviewer message to continue
-    last_message = None
-    for turn in reversed(context.conversation):
-        if turn.role == "interviewer":
-            last_message = turn.text
-            break
+    # Check memory first
+    if interview_id in active_interviews:
+        return active_interviews[interview_id]
+    
+    # Try loading from file
+    file_path = f"data/interviews/{interview_id}.json"
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            interview = json.load(f)
+            active_interviews[interview_id] = interview
+            return interview
+    
+    return None
+
+
+def save_interview(interview: dict):
+    """Save interview to memory and file."""
+    
+    interview_id = interview["interview_id"]
+    active_interviews[interview_id] = interview
+    
+    # Also save conversation history to correct location for analysis
+    conversations_dir = "data/conversations"
+    os.makedirs(conversations_dir, exist_ok=True)
+    
+    file_path = f"data/interviews/{interview_id}.json"
+    conv_path = f"data/conversations/{interview_id}.json"
+    
+    with open(file_path, 'w') as f:
+        json.dump(interview, f, indent=2)
+    
+    # Also save to conversations folder for analyzer
+    with open(conv_path, 'w') as f:
+        json.dump(interview, f, indent=2)
+
+
+def get_state_response(interview: dict) -> dict:
+    """Get formatted interview state for response."""
+    
+    start_time = datetime.fromisoformat(interview["start_time"])
+    elapsed_mins = (datetime.now() - start_time).seconds // 60
+    remaining_mins = max(0, interview["max_duration_mins"] - elapsed_mins)
+    
+    questions_remaining = interview["max_questions"] - interview["questions_asked"]
+    progress = (interview["questions_asked"] / interview["max_questions"]) * 100
     
     return {
-        "status": "resumed",
-        "interview_id": interview_id,
-        "continue_with": last_message,
+        "stage": interview["status"],
+        "progress_percent": min(100, progress),
+        "topics_covered": interview.get("topics_covered", []),
+        "current_topic": "general",
+        "questions_asked": interview["questions_asked"],
+        "questions_remaining": max(0, questions_remaining),
+        "time_elapsed_mins": elapsed_mins,
+        "time_remaining_mins": remaining_mins,
+        "target_role": interview.get("target_role", "Software Developer")
     }

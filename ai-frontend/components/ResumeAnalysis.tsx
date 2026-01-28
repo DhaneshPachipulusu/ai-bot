@@ -4,6 +4,7 @@ import { useState } from "react";
 import { uploadResume } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/auth";
+import { API_URL } from "@/lib/config";
 
 interface ATSCheck {
   name: string;
@@ -58,13 +59,15 @@ export default function ResumeAnalysis() {
 
     try {
       const parsed = await uploadResume(file);
+      
+      console.log("📄 Upload response:", parsed);  // Debug log
 
-      const response = await fetch("http://localhost:8000/api/analyze-resume", {
+      const response = await fetch(`${API_URL}/api/analyze-resume`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: user.id,
-          parsed_resume: parsed.parsed_resume,
+          parsed_resume: parsed,  // Send the whole response, not parsed.parsed_resume
           job_description: jobDescription || null,
         }),
       });
@@ -304,7 +307,7 @@ export default function ResumeAnalysis() {
                     🚨 Critical Issues ({analysis.critical_issues.length})
                   </h3>
                   <ul className="space-y-2">
-                    {analysis.critical_issues.map((issue, idx) => (
+                    {(analysis.critical_issues || []).map((issue, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-red-300">
                         <span className="mt-0.5">✗</span>
                         <span>{issue}</span>
@@ -319,7 +322,7 @@ export default function ResumeAnalysis() {
                 <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6">
                   <h3 className="font-bold text-white mb-4">ATS Compatibility Checks</h3>
                   <div className="space-y-2">
-                    {analysis.ats_checks.map((check, idx) => (
+                    {(analysis.ats_checks || []).map((check, idx) => (
                       <div
                         key={idx}
                         className={`flex items-center justify-between p-3 rounded-lg ${
@@ -357,7 +360,7 @@ export default function ResumeAnalysis() {
               <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6">
                 <h3 className="font-bold text-white mb-4">Resume Sections</h3>
                 <div className="space-y-3">
-                  {analysis.sections.map((section, idx) => (
+                  {(analysis.sections || []).map((section, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">

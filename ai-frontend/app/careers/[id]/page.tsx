@@ -224,7 +224,7 @@ export default function CareerDetailPage() {
   const colors = colorClasses[career.color];
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="w-full mx-auto">
       
       {/* Back Button */}
       <button

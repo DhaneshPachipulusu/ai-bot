@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import {
@@ -35,6 +35,18 @@ export default function InterviewBox() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Greeting & Conclusion state
+  const [showGreeting, setShowGreeting] = useState(true);
+  const [greetingText, setGreetingText] = useState("Welcome! Preparing your interview...");
+  const [showConclusion, setShowConclusion] = useState(false);
+  const [conclusionText, setConclusionText] = useState("");
+
+  // Auto-mic state
+  const [micCountdown, setMicCountdown] = useState<number | null>(null);
+  const [silenceTimer, setSilenceTimer] = useState<number>(0);
+  const [showSilenceWarning, setShowSilenceWarning] = useState(false);
+  const [autoMicEnabled, setAutoMicEnabled] = useState(true);
+
   // Media state
   const [listening, setListening] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
@@ -56,6 +68,18 @@ export default function InterviewBox() {
   const animationFrameRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startedRef = useRef(false);
+  
+  // Auto-mic refs
+  const micCountdownRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSoundTimeRef = useRef<number>(Date.now());
+  const silenceCheckRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Constants
+  const MIC_COUNTDOWN_SECONDS = 5;
+  const SILENCE_TIMEOUT_SECONDS = 8;
+  const SILENCE_WARNING_SECONDS = 5;
+  const SOUND_THRESHOLD = 15; // Audio level threshold to detect speech
 
   // Initialize
   useEffect(() => {
@@ -75,9 +99,20 @@ export default function InterviewBox() {
       const targetRole = sessionStorage.getItem("interview_role") || "Software Engineer";
       const difficulty = sessionStorage.getItem("interview_difficulty") || "auto";
 
+      // Get candidate name for greeting
+      const candidateName = parsedResume?.name || "there";
+
       try {
         setIsLoading(true);
         setError(null);
+
+        // Show personalized greeting first
+        setGreetingText(`Hi ${candidateName}! 👋`);
+        
+        // Wait a moment for greeting to be visible
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        setGreetingText(`Setting up your ${targetRole} interview...`);
 
         const response = await startConversationalInterview({
           user_id: user.id,
@@ -90,16 +125,29 @@ export default function InterviewBox() {
         });
 
         setInterviewId(response.interview_id);
+        sessionStorage.setItem("interviewId", response.interview_id);
         setCurrentMessage(response.message);
         setInterviewState(response.state);
 
-        speakMessage(response.message.text);
+        // Update greeting to show ready state
+        setGreetingText(`Ready! Let's begin your interview.`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Hide greeting and start
+        setShowGreeting(false);
+        setIsLoading(false);
+
+        // Initialize media first, then speak
         await initializeMedia();
+        
+        // Small delay before speaking first message
+        setTimeout(() => {
+          speakMessage(response.message.text);
+        }, 500);
 
       } catch (err: any) {
         console.error("Failed to start interview:", err);
         setError(err.message || "Failed to start interview");
-      } finally {
         setIsLoading(false);
       }
     };
@@ -113,13 +161,11 @@ export default function InterviewBox() {
     try {
       setCameraError(null);
       
-      // Check if mediaDevices is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setCameraError("Your browser doesn't support camera access");
         return;
       }
 
-      // Check for available devices first
       const devices = await navigator.mediaDevices.enumerateDevices();
       const hasCamera = devices.some(device => device.kind === 'videoinput');
       const hasMic = devices.some(device => device.kind === 'audioinput');
@@ -138,12 +184,9 @@ export default function InterviewBox() {
       });
 
       streamRef.current = stream;
-
-      // Set camera enabled immediately
       setCameraEnabled(true);
       setCameraError(null);
 
-      // Assign stream to video element (with retry if not ready)
       const assignStream = () => {
         if (videoRef.current && streamRef.current) {
           videoRef.current.srcObject = streamRef.current;
@@ -153,7 +196,6 @@ export default function InterviewBox() {
         return false;
       };
 
-      // Try immediately, retry if video element not ready
       if (!assignStream()) {
         const retryInterval = setInterval(() => {
           if (assignStream()) {
@@ -163,7 +205,6 @@ export default function InterviewBox() {
         setTimeout(() => clearInterval(retryInterval), 3000);
       }
 
-      // Setup audio analysis
       const audioContext = new AudioContext();
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
@@ -181,9 +222,8 @@ export default function InterviewBox() {
     } catch (err: any) {
       console.error("Media init error:", err);
       
-      // Provide specific error messages based on error type
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setCameraError("Camera permission denied. Please allow camera access in your browser settings.");
+        setCameraError("Camera permission denied. Please allow camera access.");
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         setCameraError("No camera found on this device");
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
@@ -197,12 +237,10 @@ export default function InterviewBox() {
         setCameraError(`Camera error: ${err.message || 'Unknown error'}`);
       }
       
-      // Still try to get audio even if video fails
       await initializeAudioOnly();
     }
   };
 
-  // Fallback with basic camera settings
   const initializeMediaFallback = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -228,7 +266,6 @@ export default function InterviewBox() {
     }
   };
 
-  // Audio-only initialization
   const initializeAudioOnly = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -247,7 +284,6 @@ export default function InterviewBox() {
     }
   };
 
-  // Setup audio analysis helper
   const setupAudioAnalysis = (stream: MediaStream) => {
     const audioContext = new AudioContext();
     const analyser = audioContext.createAnalyser();
@@ -260,12 +296,10 @@ export default function InterviewBox() {
     startAudioAnalysis();
   };
 
-  // Retry camera access
   const retryCamera = async () => {
     setIsRetryingCamera(true);
     setCameraError(null);
     
-    // Stop existing streams first
     streamRef.current?.getTracks().forEach((t) => t.stop());
     
     await initializeMedia();
@@ -278,7 +312,16 @@ export default function InterviewBox() {
       const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
       analyserRef.current.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      setAudioLevel(Math.min(100, (avg / 128) * 100));
+      const level = Math.min(100, (avg / 128) * 100);
+      setAudioLevel(level);
+      
+      // Track last sound time for silence detection
+      if (level > SOUND_THRESHOLD && listening) {
+        lastSoundTimeRef.current = Date.now();
+        setShowSilenceWarning(false);
+        setSilenceTimer(0);
+      }
+      
       animationFrameRef.current = requestAnimationFrame(analyze);
     };
     analyze();
@@ -289,13 +332,134 @@ export default function InterviewBox() {
     audioContextRef.current?.close();
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
+    if (micCountdownRef.current) clearTimeout(micCountdownRef.current);
+    if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+    if (silenceCheckRef.current) clearInterval(silenceCheckRef.current);
     speechSynthesis.cancel();
     recognitionRef.current?.stop();
   };
 
-  // TTS
+  // ==================== AUTO MIC FUNCTIONS ====================
+
+  // Start mic countdown after AI finishes speaking
+  const startMicCountdown = useCallback(() => {
+    if (!autoMicEnabled || isPaused || isCompleted) return;
+    
+    // Clear any existing countdown
+    if (micCountdownRef.current) {
+      clearTimeout(micCountdownRef.current);
+    }
+    
+    let countdown = MIC_COUNTDOWN_SECONDS;
+    setMicCountdown(countdown);
+    
+    const tick = () => {
+      countdown -= 1;
+      setMicCountdown(countdown);
+      
+      if (countdown <= 0) {
+        setMicCountdown(null);
+        startListeningAuto();
+      } else {
+        micCountdownRef.current = setTimeout(tick, 1000);
+      }
+    };
+    
+    micCountdownRef.current = setTimeout(tick, 1000);
+  }, [autoMicEnabled, isPaused, isCompleted]);
+
+  // Cancel mic countdown
+  const cancelMicCountdown = () => {
+    if (micCountdownRef.current) {
+      clearTimeout(micCountdownRef.current);
+      micCountdownRef.current = null;
+    }
+    setMicCountdown(null);
+  };
+
+  // Start listening with silence detection
+  const startListeningAuto = () => {
+    if (isPaused || isCompleted || listening) return;
+    
+    setListening(true);
+    setAiState("listening");
+    lastSoundTimeRef.current = Date.now();
+    setSilenceTimer(0);
+    setShowSilenceWarning(false);
+    
+    try {
+      recognitionRef.current?.start();
+    } catch (e) {
+      console.log("Recognition already started");
+    }
+    
+    // Start silence detection
+    startSilenceDetection();
+  };
+
+  // Silence detection
+  const startSilenceDetection = () => {
+    if (silenceCheckRef.current) {
+      clearInterval(silenceCheckRef.current);
+    }
+    
+    silenceCheckRef.current = setInterval(() => {
+      if (!listening) {
+        clearInterval(silenceCheckRef.current!);
+        return;
+      }
+      
+      const silenceDuration = (Date.now() - lastSoundTimeRef.current) / 1000;
+      setSilenceTimer(Math.floor(silenceDuration));
+      
+      // Show warning when approaching timeout
+      if (silenceDuration >= SILENCE_WARNING_SECONDS && !showSilenceWarning) {
+        setShowSilenceWarning(true);
+      }
+      
+      // Auto submit on timeout (only if there's an answer)
+      if (silenceDuration >= SILENCE_TIMEOUT_SECONDS) {
+        if (answer.trim()) {
+          console.log("Silence detected, auto-submitting...");
+          handleAutoSubmit();
+        } else {
+          // Reset silence timer if no answer yet
+          lastSoundTimeRef.current = Date.now();
+          setSilenceTimer(0);
+        }
+      }
+    }, 500);
+  };
+
+  // Stop silence detection
+  const stopSilenceDetection = () => {
+    if (silenceCheckRef.current) {
+      clearInterval(silenceCheckRef.current);
+      silenceCheckRef.current = null;
+    }
+    setSilenceTimer(0);
+    setShowSilenceWarning(false);
+  };
+
+  // Auto submit handler
+  const handleAutoSubmit = () => {
+    stopSilenceDetection();
+    submitAnswer();
+  };
+
+  // Cancel auto-submit
+  const cancelAutoSubmit = () => {
+    lastSoundTimeRef.current = Date.now();
+    setSilenceTimer(0);
+    setShowSilenceWarning(false);
+  };
+
+  // ==================== TTS ====================
+  
   const speakMessage = (text: string) => {
     speechSynthesis.cancel();
+    cancelMicCountdown();
+    stopSilenceDetection();
     setAiState("speaking");
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -308,13 +472,26 @@ export default function InterviewBox() {
     utterance.rate = 0.95;
     utterance.pitch = 1.0;
 
-    utterance.onend = () => setAiState("ready");
-    utterance.onerror = () => setAiState("ready");
+    utterance.onend = () => {
+      setAiState("ready");
+      // Start mic countdown after AI finishes speaking
+      if (autoMicEnabled && !isPaused && !isCompleted) {
+        startMicCountdown();
+      }
+    };
+    
+    utterance.onerror = () => {
+      setAiState("ready");
+      if (autoMicEnabled && !isPaused && !isCompleted) {
+        startMicCountdown();
+      }
+    };
 
     speechSynthesis.speak(utterance);
   };
 
-  // STT
+  // ==================== STT ====================
+  
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -331,7 +508,12 @@ export default function InterviewBox() {
           final += e.results[i][0].transcript;
         }
       }
-      if (final) setAnswer((prev) => prev + final);
+      if (final) {
+        setAnswer((prev) => prev + final);
+        // Reset silence timer when speech detected
+        lastSoundTimeRef.current = Date.now();
+        setShowSilenceWarning(false);
+      }
     };
 
     rec.onend = () => {
@@ -339,6 +521,7 @@ export default function InterviewBox() {
         try { rec.start(); } catch {}
       } else {
         setListening(false);
+        stopSilenceDetection();
       }
     };
 
@@ -346,21 +529,30 @@ export default function InterviewBox() {
   }, [listening, isPaused]);
 
   const toggleListening = () => {
+    cancelMicCountdown();
+    
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
       setAiState("ready");
+      stopSilenceDetection();
     } else {
       setListening(true);
       setAiState("listening");
+      lastSoundTimeRef.current = Date.now();
       recognitionRef.current?.start();
+      startSilenceDetection();
     }
   };
 
-  // Submit
+  // ==================== SUBMIT ====================
+  
   const submitAnswer = async () => {
     if (!answer.trim() || !interviewId || !userId || isSubmitting) return;
 
+    cancelMicCountdown();
+    stopSilenceDetection();
+    
     if (listening) {
       recognitionRef.current?.stop();
       setListening(false);
@@ -385,7 +577,7 @@ export default function InterviewBox() {
       setPerformanceHint(response.performance_hint || null);
 
       if (response.is_complete) {
-        handleComplete();
+        handleComplete(response.message.text);
       } else {
         speakMessage(response.message.text);
       }
@@ -399,31 +591,54 @@ export default function InterviewBox() {
     }
   };
 
-  // Controls
-  const handleComplete = () => {
-    setIsCompleted(true);
+  // ==================== CONTROLS ====================
+  
+  const handleComplete = (finalMessage?: string) => {
+    cancelMicCountdown();
+    stopSilenceDetection();
     cleanup();
+    
+    // Show conclusion
+    setConclusionText(finalMessage || "Thank you for completing the interview!");
+    setShowConclusion(true);
+    
+    // Speak conclusion
+    if (finalMessage) {
+      const utterance = new SpeechSynthesisUtterance(finalMessage);
+      utterance.rate = 0.95;
+      speechSynthesis.speak(utterance);
+    }
+    
     sessionStorage.setItem("interviewId", interviewId || "");
-    setTimeout(() => router.push("/report"), 3000);
+    
+    // Wait for conclusion, then redirect
+    setTimeout(() => {
+      setIsCompleted(true);
+      setTimeout(() => router.push("/report"), 2000);
+    }, 4000);
   };
 
   const endInterview = async () => {
     if (!confirm("Are you sure you want to end the interview?")) return;
     try {
-      await endConversationalInterview(interviewId!, userId!, "user_ended");
-      handleComplete();
+      const response = await endConversationalInterview(interviewId!, userId!, "user_ended");
+      handleComplete("Thanks for your time! Your report is being generated.");
     } catch (err) {
       console.error("End interview error:", err);
+      handleComplete();
     }
   };
 
   const togglePause = () => {
-    setIsPaused(!isPaused);
     if (!isPaused) {
+      // Pausing
+      cancelMicCountdown();
+      stopSilenceDetection();
       speechSynthesis.cancel();
       recognitionRef.current?.stop();
       setListening(false);
     }
+    setIsPaused(!isPaused);
   };
 
   const toggleCamera = () => {
@@ -448,7 +663,15 @@ export default function InterviewBox() {
     }
   };
 
-  // Helpers
+  const toggleAutoMic = () => {
+    setAutoMicEnabled(!autoMicEnabled);
+    if (autoMicEnabled) {
+      cancelMicCountdown();
+    }
+  };
+
+  // ==================== HELPERS ====================
+  
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
@@ -466,11 +689,12 @@ export default function InterviewBox() {
     return labels[stage] || stage;
   };
 
-  // Loading
-  if (isLoading) {
+  // ==================== RENDER: LOADING ====================
+  
+  if (isLoading || showGreeting) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md px-6">
           <div className="relative w-24 h-24 mx-auto mb-8">
             <div className="absolute inset-0 rounded-full border-4 border-blue-500/30"></div>
             <div className="absolute inset-0 rounded-full border-4 border-blue-500 border-t-transparent animate-spin"></div>
@@ -480,14 +704,19 @@ export default function InterviewBox() {
               </svg>
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Preparing Your Interview</h2>
-          <p className="text-gray-400">Setting up AI interviewer...</p>
+          <h2 className="text-2xl font-bold text-white mb-3">{greetingText}</h2>
+          <div className="flex justify-center gap-1 mt-4">
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
         </div>
       </div>
     );
   }
 
-  // Error
+  // ==================== RENDER: ERROR ====================
+  
   if (error) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -507,7 +736,32 @@ export default function InterviewBox() {
     );
   }
 
-  // Completed
+  // ==================== RENDER: CONCLUSION ====================
+  
+  if (showConclusion) {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center max-w-lg px-6">
+          <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4">Great Job! 🎉</h2>
+          <p className="text-gray-300 text-lg mb-2">{conclusionText}</p>
+          <p className="text-gray-500 text-sm mt-6">Generating your personalized report...</p>
+          <div className="flex justify-center gap-1 mt-4">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== RENDER: COMPLETED ====================
+  
   if (isCompleted) {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
@@ -518,13 +772,14 @@ export default function InterviewBox() {
             </svg>
           </div>
           <h2 className="text-3xl font-bold text-white mb-3">Interview Complete!</h2>
-          <p className="text-gray-400 mb-2">Thank you for your time.</p>
-          <p className="text-gray-500 text-sm">Redirecting to your report...</p>
+          <p className="text-gray-400 mb-2">Redirecting to your report...</p>
         </div>
       </div>
     );
   }
 
+  // ==================== RENDER: MAIN INTERVIEW ====================
+  
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col">
       {/* Header */}
@@ -543,12 +798,23 @@ export default function InterviewBox() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Auto-mic indicator */}
+            <button 
+              onClick={toggleAutoMic}
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs transition-colors ${
+                autoMicEnabled ? "bg-green-500/20 text-green-400" : "bg-slate-700 text-gray-400"
+              }`}
+            >
+              <span>Auto-Mic</span>
+              <span>{autoMicEnabled ? "ON" : "OFF"}</span>
+            </button>
+            
             <div className="hidden sm:flex items-center gap-2 bg-slate-800/50 px-4 py-2 rounded-full">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               <span className="text-sm text-gray-300">{interviewState?.progress_percent || 0}%</span>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-400">Time Remaining</p>
+              <p className="text-sm text-gray-400">Time</p>
               <p className="text-lg font-semibold text-white">{interviewState?.time_remaining_mins || 25}m</p>
             </div>
           </div>
@@ -557,7 +823,7 @@ export default function InterviewBox() {
 
       {/* Main Video Area */}
       <main className="flex-1 p-4 sm:p-6 flex flex-col sm:flex-row gap-4 sm:gap-6 min-h-0">
-        {/* AI Interviewer - Full Image */}
+        {/* AI Interviewer */}
         <div className={`flex-1 relative rounded-2xl overflow-hidden min-h-[200px] sm:min-h-0 transition-all duration-300 ${
           aiState === "speaking" 
             ? "ring-4 ring-green-400 shadow-lg shadow-green-400/30" 
@@ -565,22 +831,18 @@ export default function InterviewBox() {
             ? "ring-4 ring-yellow-400 shadow-lg shadow-yellow-400/30" 
             : "ring-2 ring-blue-500/30"
         }`}>
-          {/* Full Background Image */}
           <img 
             src="/ai-interviewer.jpg" 
             alt="AI Interviewer"
             className="absolute inset-0 w-full h-full object-cover"
           />
           
-          {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
           
-          {/* Speaking Animation Overlay */}
           {aiState === "speaking" && (
             <div className="absolute inset-0 bg-green-500/10 animate-pulse" />
           )}
           
-          {/* Status Badge */}
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-full">
             <div className={`w-2.5 h-2.5 rounded-full ${
               aiState === "speaking" ? "bg-green-400 animate-pulse" : 
@@ -593,7 +855,6 @@ export default function InterviewBox() {
             </span>
           </div>
 
-          {/* Sound Wave Animation when Speaking */}
           {aiState === "speaking" && (
             <div className="absolute bottom-4 right-4 flex items-end gap-1 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-full">
               {[1, 2, 3, 4, 3, 2, 1].map((h, i) => (
@@ -611,11 +872,9 @@ export default function InterviewBox() {
         <div className="flex-1 relative bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-700/50 min-h-[200px] sm:min-h-0">
           <video ref={videoRef} autoPlay muted playsInline className={`w-full h-full object-cover scale-x-[-1] ${cameraEnabled && cameraOn ? "" : "hidden"}`} />
 
-          {/* Camera error or off state */}
           {(!cameraEnabled || !cameraOn) && (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
               {cameraError ? (
-                // Camera Error State
                 <>
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
                     <svg className="w-10 h-10 sm:w-12 sm:h-12 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -635,17 +894,11 @@ export default function InterviewBox() {
                         Retrying...
                       </>
                     ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Retry Camera
-                      </>
+                      "Retry Camera"
                     )}
                   </button>
                 </>
               ) : !cameraOn ? (
-                // Camera turned off by user
                 <>
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-700 rounded-full flex items-center justify-center mb-3">
                     <svg className="w-10 h-10 sm:w-12 sm:h-12 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -655,7 +908,6 @@ export default function InterviewBox() {
                   <p className="text-gray-400">Camera Off</p>
                 </>
               ) : (
-                // Camera not yet initialized
                 <>
                   <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-700 rounded-full flex items-center justify-center mb-3">
                     <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -675,11 +927,30 @@ export default function InterviewBox() {
             <span className="text-white text-sm font-medium">You</span>
           </div>
 
+          {/* Audio level indicator */}
           <div className="absolute bottom-4 right-4 flex items-end gap-0.5 h-6">
             {[...Array(5)].map((_, i) => (
               <div key={i} className={`w-1 rounded-full transition-all ${audioLevel > i * 20 ? "bg-green-400" : "bg-slate-600"}`} style={{ height: `${(i + 1) * 4 + 4}px` }} />
             ))}
           </div>
+
+          {/* Mic Countdown Overlay */}
+          {micCountdown !== null && (
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-20 h-20 rounded-full border-4 border-blue-500 flex items-center justify-center mb-3 mx-auto">
+                  <span className="text-4xl font-bold text-white">{micCountdown}</span>
+                </div>
+                <p className="text-white font-medium">Mic starting...</p>
+                <button 
+                  onClick={cancelMicCountdown}
+                  className="mt-3 px-4 py-1.5 bg-slate-700 text-gray-300 text-sm rounded-lg hover:bg-slate-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
@@ -692,8 +963,24 @@ export default function InterviewBox() {
           </p>
         </div>
 
-        {/* Tip */}
-        {performanceHint?.suggestion && (
+        {/* Silence Warning */}
+        {showSilenceWarning && listening && (
+          <div className="flex items-center justify-center gap-3 bg-amber-500/20 border border-amber-500/30 rounded-xl px-4 py-2">
+            <span className="text-amber-400">⏱️</span>
+            <span className="text-amber-400 text-sm">
+              Submitting in {SILENCE_TIMEOUT_SECONDS - silenceTimer}s...
+            </span>
+            <button 
+              onClick={cancelAutoSubmit}
+              className="px-3 py-1 bg-amber-500/30 text-amber-300 text-xs rounded-lg hover:bg-amber-500/40"
+            >
+              Keep talking
+            </button>
+          </div>
+        )}
+
+        {/* Performance Hint */}
+        {performanceHint?.suggestion && !showSilenceWarning && (
           <div className="flex items-center justify-center gap-2 text-amber-400 text-sm">
             <span>💡</span>
             <span>{performanceHint.suggestion}</span>
@@ -702,19 +989,46 @@ export default function InterviewBox() {
 
         {/* Input */}
         <div className="flex items-center gap-3">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <textarea
               value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
+              onChange={(e) => {
+                setAnswer(e.target.value);
+                // Reset silence when typing
+                lastSoundTimeRef.current = Date.now();
+              }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitAnswer(); } }}
-              placeholder={listening ? "Listening... speak now" : "Type your answer or click mic..."}
+              placeholder={listening ? "🎤 Listening... speak now" : micCountdown ? `Mic in ${micCountdown}s...` : "Type your answer or wait for mic..."}
               disabled={isPaused || isSubmitting}
               rows={1}
-              className="w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-800/80 border border-slate-700 rounded-xl sm:rounded-2xl text-white text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder:text-gray-500"
+              className={`w-full px-4 sm:px-6 py-3 sm:py-4 bg-slate-800/80 border rounded-xl sm:rounded-2xl text-white text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder:text-gray-500 ${
+                listening ? "border-green-500 ring-2 ring-green-500/30" : "border-slate-700"
+              }`}
             />
+            {listening && (
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                {[1, 2, 3, 2, 1].map((h, i) => (
+                  <div 
+                    key={i} 
+                    className="w-1 bg-green-400 rounded-full animate-pulse" 
+                    style={{ height: `${h * 4 + 4}px`, animationDelay: `${i * 0.1}s` }} 
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          <button onClick={toggleListening} disabled={isPaused || isSubmitting} className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all ${listening ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse" : "bg-slate-700 text-gray-300 hover:bg-slate-600"} disabled:opacity-50`}>
+          <button 
+            onClick={toggleListening} 
+            disabled={isPaused || isSubmitting} 
+            className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all ${
+              listening 
+                ? "bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse" 
+                : micCountdown !== null
+                ? "bg-blue-500/50 text-white"
+                : "bg-slate-700 text-gray-300 hover:bg-slate-600"
+            } disabled:opacity-50`}
+          >
             <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
             </svg>
@@ -738,6 +1052,15 @@ export default function InterviewBox() {
           </button>
 
           <div className="w-px h-6 bg-slate-700" />
+
+          <button 
+            onClick={toggleAutoMic}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-colors ${
+              autoMicEnabled ? "bg-green-500/20 text-green-400" : "bg-slate-700 text-gray-400"
+            }`}
+          >
+            <span className="text-sm">Auto</span>
+          </button>
 
           <button onClick={repeatMessage} disabled={aiState === "speaking"} className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50 transition-colors">
             <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>

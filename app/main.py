@@ -1,42 +1,71 @@
+"""
+AI Interview Bot - Main Application
+"""
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from app.routes import resume, interview, analysis
-from app import database as db
 import os
-from app.routes import career
+
+# Import database
+from app import database as db
+
+# Import routers
+from app.routes import resume, interview, career
+from app.routes import analysis
 from app.routes.interview_v2 import router as interview_v2_router
+
 
 app = FastAPI(title="AI Interview Bot")
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000","https://ai-bot-ewl3.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://ai-bot-ewl3.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize database on startup
+
+# ==================
+# Startup
+# ==================
+
 @app.on_event("startup")
 def startup_event():
+    print("🚀 Starting AI Interview Bot API...")
+    
     if not os.path.exists("interview_bot.db"):
         print("🔧 Database not found. Creating...")
         db.setup_database()
     else:
         print("✅ Database found!")
+        # Run migrations for existing DB
+        db.migrate_add_role_column()
+        db.create_admin_user()
 
 
-# Existing routes
+# ==================
+# Register Routers
+# ==================
+
 app.include_router(resume.router, prefix="/api")
 app.include_router(interview.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(career.router, prefix="/api")
 app.include_router(interview_v2_router, prefix="/api")
 
+# Also register interview_v2 without /api prefix (fallback for frontend issues)
+app.include_router(interview_v2_router, prefix="")
+
 
 # ==================
-# NEW AUTH ROUTES
+# Auth Routes
 # ==================
 
 class LoginRequest(BaseModel):
@@ -59,7 +88,7 @@ def login(credentials: LoginRequest):
 
 
 # ==================
-# REPORTS ROUTES
+# Reports Routes
 # ==================
 
 @app.get("/api/user/{user_id}/reports")
@@ -79,7 +108,7 @@ def get_report(interview_id: str):
 
 
 # ==================
-# ADMIN ROUTES
+# Admin Routes
 # ==================
 
 @app.get("/api/admin/users")
@@ -89,6 +118,10 @@ def get_all_users():
     return {"users": users}
 
 
+# ==================
+# Health Check
+# ==================
+
 @app.get("/")
 def root():
     return {
@@ -96,3 +129,8 @@ def root():
         "status": "running",
         "database": "connected" if os.path.exists("interview_bot.db") else "not found"
     }
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}

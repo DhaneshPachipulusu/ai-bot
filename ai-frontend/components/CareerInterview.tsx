@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/auth";
+import { API_URL } from "@/lib/config";
 
 interface CareerRole {
   id: string;
@@ -11,7 +12,6 @@ interface CareerRole {
   description: string;
   levels: string[];
 }
-
 const CAREER_ROLES: CareerRole[] = [
   {
     id: "data-analyst",
@@ -90,7 +90,7 @@ export default function CareerInterview() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/api/generate-role-questions", {
+      const response = await fetch(`${API_URL}/generate-role-questions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
