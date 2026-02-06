@@ -23,24 +23,27 @@ export default function PracticePage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pb-8">
+    <div className="max-w-6xl mx-auto px-6 pb-10">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Interview Prep Kit</h1>
-        <p className="text-gray-400 text-sm">Everything you need to crack your interview</p>
+      <div className="mb-10">
+        <h1 className="text-3xl md:text-4xl font-semibold text-white mb-3 tracking-tight">
+          Interview Prep Kit
+        </h1>
+        <p className="text-gray-400/80 max-w-lg text-base leading-relaxed">
+          Everything you need to crack your interview
+        </p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+      <div className="flex gap-2 mb-8 overflow-x-auto pb-2 p-1.5 bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700/30">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as TabType)}
-            className={`px-4 py-2 rounded-xl font-medium text-sm whitespace-nowrap transition-all flex items-center gap-2 ${
-              activeTab === tab.id
-                ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-gray-400 hover:bg-slate-700"
-            }`}
+            className={`px-4 py-2.5 rounded-xl font-medium text-sm whitespace-nowrap transition-all duration-200 flex items-center gap-2 ${activeTab === tab.id
+              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20"
+              : "bg-transparent text-gray-500 hover:text-gray-300 hover:bg-slate-700/50"
+              }`}
           >
             <span>{tab.icon}</span>
             {tab.name}
@@ -49,7 +52,7 @@ export default function PracticePage() {
       </div>
 
       {/* Content */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         {activeTab === "intro" && <SelfIntroSection copyToClipboard={copyToClipboard} copiedIndex={copiedIndex} />}
         {activeTab === "aptitude" && <AptitudeSection />}
         {activeTab === "hr" && <HRQuestionsSection copyToClipboard={copyToClipboard} copiedIndex={copiedIndex} />}
@@ -102,29 +105,44 @@ Thank you.`,
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
-        <h3 className="text-blue-400 font-semibold mb-2">📌 Self Intro Tips</h3>
-        <ul className="text-sm text-gray-300 space-y-1">
-          <li>• Keep it under 2 minutes</li>
-          <li>• Speak clearly and confidently</li>
-          <li>• Mention: Name → Education → Skills → Project → Why this role</li>
-          <li>• Practice in front of mirror or record yourself</li>
+    <div className="space-y-5">
+      {/* Tips Card - Enhanced glassmorphism */}
+      <div className="bg-slate-800/40 backdrop-blur-sm border border-blue-500/20 rounded-2xl p-5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/8 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+        <div className="flex items-center gap-2.5 mb-3 relative">
+          <div className="w-8 h-8 bg-blue-500/15 rounded-lg flex items-center justify-center text-blue-400 text-sm">📌</div>
+          <h3 className="text-white font-medium">Self Intro Tips</h3>
+        </div>
+        <ul className="text-sm text-gray-400 space-y-2 relative">
+          <li className="flex items-start gap-2"><span className="text-blue-400/60 mt-0.5">•</span><span>Keep it under 2 minutes</span></li>
+          <li className="flex items-start gap-2"><span className="text-blue-400/60 mt-0.5">•</span><span>Speak clearly and confidently</span></li>
+          <li className="flex items-start gap-2"><span className="text-blue-400/60 mt-0.5">•</span><span>Mention: Name → Education → Skills → Project → Why this role</span></li>
+          <li className="flex items-start gap-2"><span className="text-blue-400/60 mt-0.5">•</span><span>Practice in front of mirror or record yourself</span></li>
         </ul>
       </div>
 
       {intros.map((intro, index) => (
-        <div key={index} className="bg-slate-800/60 rounded-xl border border-slate-700/50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-700/30">
-            <h3 className="font-semibold text-white">{intro.title}</h3>
+        <div key={index} className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/40 overflow-hidden transition-all duration-200 hover:border-slate-600/60">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700/40">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+              <h3 className="font-medium text-white">{intro.title}</h3>
+            </div>
             <button
               onClick={() => copyToClipboard(intro.template, index)}
-              className="px-3 py-1 bg-slate-600 hover:bg-slate-500 rounded-lg text-xs text-white transition"
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 ${copiedIndex === index
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : "bg-slate-700/60 text-gray-300 hover:bg-slate-600 hover:text-white border border-slate-600/50"
+                }`}
             >
-              {copiedIndex === index ? "✓ Copied!" : "📋 Copy"}
+              {copiedIndex === index ? (
+                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Copied</>
+              ) : (
+                <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>Copy</>
+              )}
             </button>
           </div>
-          <pre className="p-4 text-sm text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+          <pre className="p-5 text-sm text-gray-400/90 whitespace-pre-wrap font-mono leading-relaxed bg-slate-900/30 border-l-2 border-blue-500/30">
             {intro.template}
           </pre>
         </div>
@@ -221,18 +239,18 @@ function AptitudeSection() {
   ];
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
+    <div className="grid md:grid-cols-2 gap-5">
       {categories.map((cat, index) => (
-        <div key={index} className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div key={index} className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/40 p-5 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/50">
+          <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-700/40">
             <span className="text-xl">{cat.icon}</span>
-            <h3 className="font-semibold text-white">{cat.title}</h3>
+            <h3 className="font-medium text-white">{cat.title}</h3>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {cat.formulas.map((f, i) => (
-              <div key={i} className="flex justify-between items-center py-1 border-b border-slate-700/50 last:border-0">
-                <span className="text-gray-400 text-sm">{f.name}</span>
-                <code className="text-green-400 text-sm bg-slate-900/50 px-2 py-0.5 rounded">{f.formula}</code>
+              <div key={i} className="flex justify-between items-center py-1.5">
+                <span className="text-gray-400/90 text-sm">{f.name}</span>
+                <code className="text-emerald-400 text-sm bg-slate-900/50 px-2.5 py-1 rounded-lg font-mono">{f.formula}</code>
               </div>
             ))}
           </div>
@@ -288,29 +306,41 @@ function HRQuestionsSection({ copyToClipboard, copiedIndex }: { copyToClipboard:
   ];
 
   return (
-    <div className="space-y-3">
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4">
-        <h3 className="text-yellow-400 font-semibold mb-2">💡 HR Round Tips</h3>
-        <ul className="text-sm text-gray-300 space-y-1">
-          <li>• Be honest - don't make up stories</li>
-          <li>• Use STAR method: Situation → Task → Action → Result</li>
-          <li>• Research the company before interview</li>
-          <li>• Stay positive, never badmouth previous experiences</li>
+    <div className="space-y-5">
+      {/* HR Tips Card - Enhanced glassmorphism */}
+      <div className="bg-slate-800/40 backdrop-blur-sm border border-amber-500/20 rounded-2xl p-5 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/8 blur-3xl rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+        <div className="flex items-center gap-2.5 mb-3 relative">
+          <div className="w-8 h-8 bg-amber-500/15 rounded-lg flex items-center justify-center text-amber-400 text-sm">💡</div>
+          <h3 className="text-white font-medium">HR Round Tips</h3>
+        </div>
+        <ul className="text-sm text-gray-400 space-y-2 relative">
+          <li className="flex items-start gap-2"><span className="text-amber-400/60 mt-0.5">•</span><span>Be honest - don’t make up stories</span></li>
+          <li className="flex items-start gap-2"><span className="text-amber-400/60 mt-0.5">•</span><span>Use STAR method: Situation → Task → Action → Result</span></li>
+          <li className="flex items-start gap-2"><span className="text-amber-400/60 mt-0.5">•</span><span>Research the company before interview</span></li>
+          <li className="flex items-start gap-2"><span className="text-amber-400/60 mt-0.5">•</span><span>Stay positive, never badmouth previous experiences</span></li>
         </ul>
       </div>
 
       {questions.map((item, index) => (
-        <div key={index} className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-          <div className="flex justify-between items-start mb-2">
-            <h4 className="font-semibold text-blue-400">Q: {item.q}</h4>
+        <div key={index} className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/40 p-5 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/50">
+          <div className="flex justify-between items-start gap-4 mb-3">
+            <h4 className="font-medium text-blue-400">Q: {item.q}</h4>
             <button
               onClick={() => copyToClipboard(item.a, index + 100)}
-              className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-gray-300 transition flex-shrink-0"
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 flex-shrink-0 ${copiedIndex === index + 100
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : "bg-slate-700/60 text-gray-300 hover:bg-slate-600 hover:text-white border border-slate-600/50"
+                }`}
             >
-              {copiedIndex === index + 100 ? "✓" : "📋"}
+              {copiedIndex === index + 100 ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+              )}
             </button>
           </div>
-          <p className="text-gray-300 text-sm leading-relaxed">{item.a}</p>
+          <p className="text-gray-400/90 text-sm leading-relaxed">{item.a}</p>
         </div>
       ))}
     </div>
@@ -389,15 +419,15 @@ function TechnicalSection() {
   ];
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
+    <div className="grid md:grid-cols-2 gap-5">
       {topics.map((topic, index) => (
-        <div key={index} className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-          <h3 className="font-semibold text-white mb-3 pb-2 border-b border-slate-700">{topic.title}</h3>
-          <div className="space-y-2">
+        <div key={index} className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/40 p-5 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/50">
+          <h3 className="font-medium text-white mb-4 pb-3 border-b border-slate-700/40">{topic.title}</h3>
+          <div className="space-y-2.5">
             {topic.items.map((item, i) => (
-              <div key={i} className="flex gap-2">
-                <code className="text-blue-400 text-sm font-medium min-w-[100px]">{item.term}</code>
-                <span className="text-gray-400 text-sm">— {item.def}</span>
+              <div key={i} className="flex gap-3">
+                <code className="text-blue-400 text-sm font-medium font-mono min-w-[100px]">{item.term}</code>
+                <span className="text-gray-400/90 text-sm">— {item.def}</span>
               </div>
             ))}
           </div>
@@ -486,18 +516,18 @@ function TipsSection() {
   ];
 
   return (
-    <div className="grid md:grid-cols-2 gap-4">
+    <div className="grid md:grid-cols-2 gap-5">
       {tipCategories.map((cat, index) => (
-        <div key={index} className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-          <div className="flex items-center gap-2 mb-3">
+        <div key={index} className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/40 p-5 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/50">
+          <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-700/40">
             <span className="text-xl">{cat.icon}</span>
-            <h3 className="font-semibold text-white">{cat.title}</h3>
+            <h3 className="font-medium text-white">{cat.title}</h3>
           </div>
-          <ul className="space-y-2">
+          <ul className="space-y-2.5">
             {cat.tips.map((tip, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                <span className="text-green-400 mt-0.5">✓</span>
-                {tip}
+              <li key={i} className="flex items-start gap-2.5 text-sm text-gray-400/90">
+                <span className="text-emerald-400/80 mt-0.5 flex-shrink-0">✓</span>
+                <span>{tip}</span>
               </li>
             ))}
           </ul>

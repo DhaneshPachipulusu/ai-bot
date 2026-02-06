@@ -1,0 +1,50 @@
+[
+    {
+        "id": "job_001",
+        "title": "DevOps Intern",
+        "company": "CloudTech Solutions",
+        "location": "Remote",
+        "apply_url": "https://example.com/apply/devops-intern",
+        "active": true
+    },
+    {
+        "id": "job_002",
+        "title": "Junior Software Developer",
+        "company": "StartupX Pvt Ltd",
+        "location": "Bangalore",
+        "apply_url": "https://example.com/apply/junior-dev",
+        "active": true
+    },
+    {
+        "id": "job_003",
+        "title": "Fresher Data Analyst",
+        "company": "DataDriven Inc",
+        "location": "Hyderabad",
+        "apply_url": "https://example.com/apply/data-analyst",
+        "active": true
+    },
+    {
+        "id": "job_004",
+        "title": "Frontend Developer Intern",
+        "company": "DesignFirst Studio",
+        "location": "Remote",
+        "apply_url": "https://example.com/apply/frontend-intern",
+        "active": true
+    },
+    {
+        "id": "job_005",
+        "title": "Cloud Engineer Fresher",
+        "company": "AWS Partner Co",
+        "location": "Chennai",
+        "apply_url": "https://example.com/apply/cloud-fresher",
+        "active": true
+    },
+    {
+        "id": "job_006",
+        "title": "QA Engineer Intern",
+        "company": "QualityTech",
+        "location": "Pune",
+        "apply_url": "https://example.com/apply/qa-intern",
+        "active": false
+    }
+]

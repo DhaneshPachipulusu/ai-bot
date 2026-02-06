@@ -1,0 +1,10 @@
+{
+  "branches": [
+    {"id": "cse", "name": "Computer Science", "icon": "💻", "color": "#3b82f6", "description": "Software, Programming, Data Science"},
+    {"id": "ece", "name": "Electronics & Communication", "icon": "📡", "color": "#10b981", "description": "Embedded, VLSI, IoT"},
+    {"id": "it", "name": "Information Technology", "icon": "🌐", "color": "#8b5cf6", "description": "Networking, Security, Cloud"},
+    {"id": "eee", "name": "Electrical Engineering", "icon": "⚡", "color": "#f59e0b", "description": "Power Systems, Control"},
+    {"id": "mech", "name": "Mechanical Engineering", "icon": "⚙️", "color": "#ef4444", "description": "Design, Manufacturing, CAD"},
+    {"id": "civil", "name": "Civil Engineering", "icon": "🏗️", "color": "#06b6d4", "description": "Construction, Structures"}
+  ]
+}

@@ -1,0 +1,75 @@
+{
+    "topic": "Embedded Systems",
+    "branch": "ece",
+    "notes": [
+        {
+            "id": "microcontrollers",
+            "title": "Microcontrollers & Microprocessors",
+            "icon": "🕹️",
+            "keyPoints": [
+                "Difference between Microprocessor (MPU) and Microcontroller (MCU)",
+                "Architecture: ARM, AVR, PIC, 8051",
+                "Memory Organization: RAM, ROM, Flash, EEPROM",
+                "Peripheral Interfacing: GPIO, ADC, DAC, Timers"
+            ],
+            "mustKnow": [
+                "Interrupt handling and ISRs",
+                "Communication protocols (I2C, SPI, UART)",
+                "Memory mapping and addressing modes",
+                "Clock systems and power management",
+                "Bootloaders and firmware basics"
+            ],
+            "practiceTopics": [
+                "Interrupts",
+                "I2C/SPI",
+                "Timers",
+                "Memory"
+            ]
+        },
+        {
+            "id": "rtos",
+            "title": "Real-Time Operating Systems (RTOS)",
+            "icon": "⏱️",
+            "keyPoints": [
+                "Deterministic behavior and hard vs soft real-time",
+                "Task scheduling (Preemptive vs Cooperative)",
+                "Inter-task communication (Queues, Semaphores, Mutexes)",
+                "Priority Inversion and Inheritance"
+            ],
+            "mustKnow": [
+                "Task context switching",
+                "Deadlock and starvation prevention",
+                "Resource sharing mechanisms",
+                "FreeRTOS basics"
+            ],
+            "practiceTopics": [
+                "Scheduling",
+                "Semaphores",
+                "Context Switch"
+            ]
+        },
+        {
+            "id": "c-embedded",
+            "title": "Embedded C Programming",
+            "icon": "𝐂",
+            "keyPoints": [
+                "Bitwise operations (setting/clearing bits)",
+                "Volatile keyword and compiler optimizations",
+                "Pointers to registers and memory interaction",
+                "Structure padding and alignment"
+            ],
+            "mustKnow": [
+                "Bit manipulation macros",
+                "Memory leaks and stack overflow",
+                "Inline assembly basics",
+                "Cross-compilation toolchains"
+            ],
+            "practiceTopics": [
+                "Bitwise Ops",
+                "Pointers",
+                "Structs",
+                "Volatile"
+            ]
+        }
+    ]
+}

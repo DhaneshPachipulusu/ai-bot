@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_URL } from "@/lib/config";
 import Link from "next/link";
+
+/* =======================
+   Types
+======================= */
 
 interface QAFeedback {
   question: string;
@@ -11,293 +16,462 @@ interface QAFeedback {
   score?: number;
 }
 
-interface ReportData {
-  overall_score: number | string;
-  fluency: number | string;
-  grammar: number | string;
-  technical_depth: number | string;
-  confidence: number | string;
-  clarity: number | string;
-  response_pace: number | string;
-  strengths: string[];
-  weaknesses: string[];
-  recommendations: string[];
-  job_readiness: string;
-  qa_feedback?: QAFeedback[];
-  conversation?: Array<{ role: string; content: string }>;
+interface Scores {
+  communication: number;
+  technical: number;
+  problem_solving: number;
+  clarity: number;
+  confidence: number;
+  pace: number;
 }
+
+interface ReportData {
+  overall_score: number;
+  scores: Scores;
+  strengths: string[];
+  improvements: string[];
+  suggestions: string[];
+  job_readiness: string;
+  analysis_mode?: "ai" | "rule_based";
+  qa_feedback: QAFeedback[];
+}
+
+/* =======================
+   Helpers
+======================= */
+
+const getColor = (s: number) =>
+  s >= 7 ? "#22c55e" : s >= 5 ? "#eab308" : "#ef4444";
+
+const getReadinessInfo = (score: number) => {
+  if (score >= 8) return { level: "High", color: "text-green-400", bg: "bg-green-500/15" };
+  if (score >= 6.5) return { level: "Moderate", color: "text-yellow-400", bg: "bg-yellow-500/15" };
+  if (score >= 5) return { level: "Developing", color: "text-orange-400", bg: "bg-orange-500/15" };
+  return { level: "Needs Practice", color: "text-red-400", bg: "bg-red-500/15" };
+};
+
+/* =======================
+   Small Components
+======================= */
+
+function AnswerBadge({ score }: { score?: number }) {
+  if (score === undefined) return null;
+  if (score >= 7) return <span className="text-green-400 text-xs">🟢 Strong</span>;
+  if (score >= 5) return <span className="text-yellow-400 text-xs">🟡 Good</span>;
+  return <span className="text-red-400 text-xs">🔴 Improve</span>;
+}
+
+// Score Cards Component (Right side of top row)
+function ScoreCards({ scores }: { scores: Scores }) {
+  const items = [
+    { label: "Communication", value: scores.communication, icon: "💬" },
+    { label: "Technical", value: scores.technical, icon: "⚙️" },
+    { label: "Problem Solving", value: scores.problem_solving, icon: "🧩" },
+    { label: "Clarity", value: scores.clarity, icon: "✨" },
+    { label: "Confidence", value: scores.confidence, icon: "💪" },
+    { label: "Pace", value: scores.pace, icon: "⏱️" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {items.map((s, i) => (
+        <div
+          key={i}
+          className="bg-slate-700/50 rounded-lg p-2.5 text-center border border-slate-600/50"
+        >
+          <div className="text-sm mb-0.5">{s.icon}</div>
+          <div className="text-[9px] text-gray-400 uppercase tracking-wide">{s.label}</div>
+          <div className="text-lg font-bold" style={{ color: getColor(s.value) }}>
+            {s.value}<span className="text-[10px] text-gray-500">/10</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Collapsible Section Component
+function CollapsibleSection({
+  title,
+  items,
+  color,
+  defaultOpen = false,
+  priority = false,
+  hint
+}: {
+  title: string;
+  items: string[];
+  color: string;
+  defaultOpen?: boolean;
+  priority?: boolean;
+  hint?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  if (items.length === 0) return null;
+
+  const colorClasses: Record<string, { bg: string; border: string; text: string }> = {
+    red: { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400" },
+    yellow: { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-400" },
+    blue: { bg: "bg-blue-500/10", border: "border-blue-500/20", text: "text-blue-400" },
+    green: { bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-400" },
+  };
+
+  const colors = colorClasses[color] || colorClasses.blue;
+
+  return (
+    <div className={`${colors.bg} border ${colors.border} rounded-xl overflow-hidden ${priority ? 'ring-1 ring-red-500/30' : ''}`}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <h4 className={`${colors.text} text-xs font-semibold`}>{title}</h4>
+          {hint && <span className="text-[10px] text-gray-500 bg-slate-700/50 px-1.5 py-0.5 rounded">{hint}</span>}
+        </div>
+        <span className={`text-xs ${colors.text}`}>{isOpen ? "▲" : "▼"}</span>
+      </button>
+
+      {isOpen && (
+        <div className="px-3 pb-3">
+          <ul className="text-xs text-gray-300 space-y-1">
+            {items.map((item, idx) => (
+              <li key={idx}>• {item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Collapsible QA Item Component
+function QAItem({ qa, index }: { qa: QAFeedback; index: number }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="bg-slate-700/40 rounded-lg border border-slate-600/30 overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full p-3 flex items-start justify-between gap-3 text-left hover:bg-slate-700/50 transition-colors"
+      >
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <span className="shrink-0 bg-blue-500/20 text-blue-400 text-xs font-bold px-2 py-1 rounded">
+            Q{index + 1}
+          </span>
+          <p className="text-gray-200 text-sm leading-relaxed line-clamp-2">{qa.question}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <AnswerBadge score={qa.score} />
+          <span className="text-gray-500 text-xs">{isExpanded ? "▲" : "▼"}</span>
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="bg-slate-800/50 rounded-lg p-3 border-l-2 border-blue-500/50">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Your Answer</p>
+            <p className="text-gray-300 text-sm leading-relaxed">
+              {qa.user_answer || <span className="text-gray-500 italic">No answer recorded</span>}
+            </p>
+          </div>
+
+          {qa.better_answer && (
+            <div className="bg-green-500/5 rounded-lg p-3 border-l-2 border-green-500/50">
+              <p className="text-xs text-green-500 uppercase tracking-wide mb-1">💡 Suggested Improvement</p>
+              <p className="text-gray-300 text-sm leading-relaxed">{qa.better_answer}</p>
+            </div>
+          )}
+
+          {qa.score && qa.score >= 7 && !qa.better_answer && (
+            <div className="bg-green-500/10 rounded-lg p-3 border-l-2 border-green-500">
+              <p className="text-green-400 text-sm">✔ Strong answer!</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =======================
+   Radar Chart
+======================= */
+
+function RadarChart({ scores }: { scores: Scores }) {
+  const metrics = [
+    { label: "Comm.", value: scores.communication },
+    { label: "Tech", value: scores.technical },
+    { label: "Problem", value: scores.problem_solving },
+    { label: "Clarity", value: scores.clarity },
+    { label: "Confid.", value: scores.confidence },
+    { label: "Pace", value: scores.pace },
+  ];
+
+  const size = 180;
+  const center = size / 2;
+  const radius = 65;
+  const angleStep = (2 * Math.PI) / metrics.length;
+  const startAngle = -Math.PI / 2;
+
+  const points = metrics.map((m, i) => {
+    const angle = startAngle + i * angleStep;
+    const r = (m.value / 10) * radius;
+    return {
+      x: center + r * Math.cos(angle),
+      y: center + r * Math.sin(angle),
+      lx: center + (radius + 18) * Math.cos(angle),
+      ly: center + (radius + 18) * Math.sin(angle),
+      label: m.label,
+      value: m.value,
+    };
+  });
+
+  return (
+    <svg width={size} height={size} className="mx-auto">
+      {[...Array(5)].map((_, i) => {
+        const r = ((i + 1) / 5) * radius;
+        const level = metrics
+          .map((_, j) => {
+            const a = startAngle + j * angleStep;
+            return `${center + r * Math.cos(a)},${center + r * Math.sin(a)}`;
+          })
+          .join(" ");
+        return <polygon key={i} points={level} fill="none" stroke="#334155" />;
+      })}
+
+      {metrics.map((_, i) => {
+        const a = startAngle + i * angleStep;
+        return (
+          <line
+            key={i}
+            x1={center}
+            y1={center}
+            x2={center + radius * Math.cos(a)}
+            y2={center + radius * Math.sin(a)}
+            stroke="#334155"
+          />
+        );
+      })}
+
+      <polygon
+        points={points.map(p => `${p.x},${p.y}`).join(" ")}
+        fill="rgba(59,130,246,0.3)"
+        stroke="#3b82f6"
+        strokeWidth="2"
+      />
+
+      {points.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r="3" fill={getColor(p.value)} />
+      ))}
+
+      {points.map((p, i) => (
+        <text
+          key={i}
+          x={p.lx}
+          y={p.ly}
+          textAnchor="middle"
+          className="fill-gray-400 text-[9px]"
+        >
+          {p.label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+/* =======================
+   Main Page
+======================= */
 
 export default function ReportPage() {
   const router = useRouter();
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showFeedback, setShowFeedback] = useState(false);
-
-  // Convert text scores to numbers
-  const scoreToNumber = (score: number | string): number => {
-    if (typeof score === 'number') return Math.min(10, Math.max(0, score));
-    const scoreMap: Record<string, number> = {
-      'excellent': 9, 'very_good': 8, 'good': 7, 'above_average': 6.5,
-      'average': 6, 'below_average': 5, 'fair': 4, 'poor': 3,
-      'very_poor': 2, 'very_low': 2, 'inconsistent': 4, 'not_assessed': 0,
-    };
-    const key = String(score).toLowerCase().replace(/\s+/g, '_').replace(/[^a-z_]/g, '');
-    if (scoreMap[key] !== undefined) return scoreMap[key];
-    const num = parseFloat(String(score));
-    return isNaN(num) ? 5 : Math.min(10, Math.max(0, num));
-  };
+  const [showQA, setShowQA] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem("interviewId");
-    if (!id) { router.push("/interview"); return; }
+    if (!id) {
+      router.push("/interview");
+      return;
+    }
 
-    fetch(`http://127.0.0.1:8000/api/analyze-interview?interview_id=${id}`, { method: "POST" })
-      .then((res) => res.json())
-      .then((data) => { setReport(data); setLoading(false); })
+    fetch(`${API_URL}/api/analyze-interview?interview_id=${id}`, {
+      method: "POST",
+    })
+      .then(res => res.json())
+      .then(data => {
+        setReport(data);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [router]);
 
   if (loading) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-white text-sm">Analyzing...</p>
-        </div>
+      <div className="h-screen bg-slate-900 flex items-center justify-center text-white">
+        Analyzing interview…
       </div>
     );
   }
 
   if (!report) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-red-400">Failed to load report</p>
+      <div className="h-screen bg-slate-900 flex items-center justify-center text-red-400">
+        Failed to load report
       </div>
     );
   }
 
-  const overallScore = scoreToNumber(report.overall_score);
-  const metrics = [
-    { label: "Fluency", value: scoreToNumber(report.fluency) },
-    { label: "Grammar", value: scoreToNumber(report.grammar) },
-    { label: "Technical", value: scoreToNumber(report.technical_depth) },
-    { label: "Confidence", value: scoreToNumber(report.confidence) },
-    { label: "Clarity", value: scoreToNumber(report.clarity) },
-    { label: "Pace", value: scoreToNumber(report.response_pace) },
-  ];
-
-  // Extract Q&A from conversation if available
-  const qaFeedback: QAFeedback[] = report.qa_feedback || [];
-  if (qaFeedback.length === 0 && report.conversation) {
-    for (let i = 0; i < report.conversation.length - 1; i++) {
-      if (report.conversation[i].role === 'assistant' && report.conversation[i + 1]?.role === 'user') {
-        qaFeedback.push({
-          question: report.conversation[i].content,
-          user_answer: report.conversation[i + 1].content,
-        });
-      }
-    }
-  }
-
-  const getColor = (s: number) => s >= 7 ? "#22c55e" : s >= 5 ? "#eab308" : "#ef4444";
-
-  // Radar Chart Component
-  const RadarChart = () => {
-    const size = 200;
-    const center = size / 2;
-    const radius = 70;
-    const levels = 5;
-
-    const angleStep = (2 * Math.PI) / metrics.length;
-    const startAngle = -Math.PI / 2;
-
-    // Create points for each metric
-    const points = metrics.map((m, i) => {
-      const angle = startAngle + i * angleStep;
-      const r = (m.value / 10) * radius;
-      return {
-        x: center + r * Math.cos(angle),
-        y: center + r * Math.sin(angle),
-        labelX: center + (radius + 25) * Math.cos(angle),
-        labelY: center + (radius + 25) * Math.sin(angle),
-        label: m.label,
-        value: m.value,
-      };
-    });
-
-    const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
-
-    return (
-      <svg width={size} height={size} className="mx-auto">
-        {/* Background levels */}
-        {[...Array(levels)].map((_, i) => {
-          const r = ((i + 1) / levels) * radius;
-          const levelPoints = metrics.map((_, j) => {
-            const angle = startAngle + j * angleStep;
-            return `${center + r * Math.cos(angle)},${center + r * Math.sin(angle)}`;
-          }).join(' ');
-          return (
-            <polygon
-              key={i}
-              points={levelPoints}
-              fill="none"
-              stroke="#334155"
-              strokeWidth="1"
-            />
-          );
-        })}
-
-        {/* Axis lines */}
-        {metrics.map((_, i) => {
-          const angle = startAngle + i * angleStep;
-          return (
-            <line
-              key={i}
-              x1={center}
-              y1={center}
-              x2={center + radius * Math.cos(angle)}
-              y2={center + radius * Math.sin(angle)}
-              stroke="#334155"
-              strokeWidth="1"
-            />
-          );
-        })}
-
-        {/* Data polygon */}
-        <polygon
-          points={polygonPoints}
-          fill="rgba(59, 130, 246, 0.3)"
-          stroke="#3b82f6"
-          strokeWidth="2"
-        />
-
-        {/* Data points */}
-        {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="4" fill={getColor(p.value)} />
-        ))}
-
-        {/* Labels */}
-        {points.map((p, i) => (
-          <text
-            key={i}
-            x={p.labelX}
-            y={p.labelY}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            className="fill-gray-400 text-[10px]"
-          >
-            {p.label}
-          </text>
-        ))}
-      </svg>
-    );
-  };
+  const mustImprove = (report.improvements || []).slice(0, 2);
+  const shouldImprove = (report.improvements || []).slice(2, 4);
+  const advancedImprove = (report.improvements || []).slice(4);
+  const readiness = getReadinessInfo(report.overall_score);
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex flex-col">
+    <div className="min-h-screen bg-slate-900 p-4 text-white">
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-lg font-bold text-white">Interview Report</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-lg font-bold">Interview Report</h1>
         <div className="flex gap-2">
-          <Link href="/interview" className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg">New</Link>
-          <Link href="/dashboard" className="px-3 py-1 bg-slate-700 text-white text-xs rounded-lg">Dashboard</Link>
+          <Link href="/interview" className="px-3 py-1.5 bg-blue-600 rounded-lg text-xs font-medium hover:bg-blue-500">New Interview</Link>
+          <Link href="/reports" className="px-3 py-1.5 bg-slate-700 rounded-lg text-xs font-medium hover:bg-slate-600">All Reports</Link>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
-        
-        {/* Left: Radar Chart + Score */}
-        <div className="lg:col-span-4 bg-slate-800/60 rounded-xl p-4 flex flex-col items-center justify-center min-h-[400px]">
-          <RadarChart />
-          <div className="text-center mt-2">
-            <span className={`text-3xl font-bold ${overallScore >= 7 ? "text-green-400" : overallScore >= 5 ? "text-yellow-400" : "text-red-400"}`}>
-              {overallScore.toFixed(1)}
-            </span>
-            <span className="text-gray-400 text-sm">/10</span>
+      {/* ==========================================
+          TOP SECTION: Performance Overview
+      ========================================== */}
+      <div className="bg-slate-800/60 rounded-xl p-4 mb-4 border border-slate-700/50">
+        {/* Radar + Score Cards Side-by-Side */}
+        <div className="grid lg:grid-cols-2 gap-4 items-center">
+          {/* Left: Radar Chart */}
+          <div className="flex justify-center">
+            <RadarChart scores={report.scores} />
           </div>
-          <p className="text-gray-400 text-xs">Overall Score</p>
-          <span className={`mt-1 px-2 py-0.5 rounded-full text-xs ${overallScore >= 7 ? "bg-green-500/20 text-green-400" : overallScore >= 5 ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"}`}>
-            {report.job_readiness || (overallScore >= 7 ? "Ready" : overallScore >= 5 ? "Developing" : "Needs Practice")}
-          </span>
+
+          {/* Right: Score Cards */}
+          <div>
+            <ScoreCards scores={report.scores} />
+          </div>
         </div>
 
-        {/* Right: Feedback */}
-        <div className="lg:col-span-8 flex flex-col gap-4 min-h-[400px]">
-          {/* Strengths & Weaknesses Row */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Strengths */}
-            <div className="bg-green-500/10 rounded-xl p-3 border border-green-500/20">
-              <h4 className="text-green-400 font-semibold text-xs mb-2">✓ Strengths</h4>
-              <ul className="space-y-1">
-                {(report.strengths || []).slice(0, 2).map((s, i) => (
-                  <li key={i} className="text-gray-300 text-xs leading-tight">{s}</li>
-                ))}
-              </ul>
+        {/* Overall Score & Readiness */}
+        <div className="mt-4 pt-4 border-t border-slate-700/50 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="text-center">
+            <div className="text-4xl font-bold">
+              {report.overall_score.toFixed(1)}
+              <span className="text-lg text-gray-400"> /10</span>
             </div>
-            {/* Weaknesses */}
-            <div className="bg-orange-500/10 rounded-xl p-3 border border-orange-500/20">
-              <h4 className="text-orange-400 font-semibold text-xs mb-2">⚠ Improve</h4>
-              <ul className="space-y-1">
-                {(report.weaknesses || []).slice(0, 2).map((w, i) => (
-                  <li key={i} className="text-gray-300 text-xs leading-tight">{w}</li>
-                ))}
-              </ul>
-            </div>
+            <p className="text-xs text-gray-500 mt-1">Overall Score</p>
           </div>
 
-          {/* Suggestions */}
-          <div className="bg-blue-500/10 rounded-xl p-3 border border-blue-500/20">
-            <h4 className="text-blue-400 font-semibold text-xs mb-2">💡 Suggestions</h4>
-            <div className="grid grid-cols-3 gap-2">
-              {(report.recommendations || []).slice(0, 3).map((r, i) => (
-                <div key={i} className="flex items-start gap-1 bg-slate-800/50 rounded p-2">
-                  <span className="w-4 h-4 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-400 text-[10px] flex-shrink-0">{i + 1}</span>
-                  <span className="text-gray-300 text-[10px] leading-tight">{r}</span>
-                </div>
+          <div className="hidden sm:block w-px h-12 bg-slate-700"></div>
+
+          <div className="text-center">
+            <div className={`inline-block px-4 py-1.5 rounded-full text-sm font-medium ${readiness.bg} ${readiness.color}`}>
+              Interview Readiness: {readiness.level}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {report.analysis_mode === "ai" ? "🧠 AI-assisted evaluation" : "⚙️ Rule-based"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ==========================================
+          MIDDLE SECTION: Strengths vs Must Improve
+      ========================================== */}
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
+        {/* Strengths - Calm styling */}
+        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+          <h4 className="text-green-400 text-sm font-semibold mb-3 flex items-center gap-2">
+            <span>✓</span> Strengths
+          </h4>
+          <ul className="text-sm text-gray-300 space-y-2">
+            {(report.strengths || []).slice(0, 5).map((s, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="text-green-400 mt-0.5">•</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Must Improve - Emphasized styling */}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 ring-1 ring-red-500/20">
+          <h4 className="text-red-400 text-sm font-semibold mb-3 flex items-center gap-2">
+            <span>🔴</span> Must Improve
+            <span className="text-[10px] text-gray-500 bg-slate-700/50 px-2 py-0.5 rounded ml-auto">Focus here first</span>
+          </h4>
+          {mustImprove.length > 0 ? (
+            <ul className="text-sm text-gray-300 space-y-2">
+              {mustImprove.map((s, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-red-400 mt-0.5">•</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500">Great job! No critical areas to improve.</p>
+          )}
+        </div>
+      </div>
+
+      {/* ==========================================
+          BOTTOM SECTION: Secondary & Deep-Dive
+      ========================================== */}
+      <div className="space-y-3">
+        {/* Should Improve - Collapsed */}
+        <CollapsibleSection
+          title="🟡 Should Improve"
+          items={shouldImprove}
+          color="yellow"
+          defaultOpen={false}
+        />
+
+        {/* Advanced - Collapsed */}
+        <CollapsibleSection
+          title="🔵 Advanced"
+          items={advancedImprove}
+          color="blue"
+          defaultOpen={false}
+        />
+
+        {/* Suggestions - Collapsed */}
+        <CollapsibleSection
+          title="💡 Suggestions"
+          items={report.suggestions || []}
+          color="blue"
+          defaultOpen={false}
+        />
+
+        {/* Question-by-Question Feedback - Collapsed */}
+        <div className="bg-slate-800/60 rounded-xl border border-slate-700">
+          <button
+            className="w-full px-4 py-3 flex justify-between items-center text-sm font-medium hover:bg-slate-700/30 transition-colors rounded-t-xl"
+            onClick={() => setShowQA(!showQA)}
+          >
+            <span>📝 Question-by-Question Feedback ({(report.qa_feedback || []).length} questions)</span>
+            <span className="text-gray-400">{showQA ? "▲" : "▼"}</span>
+          </button>
+
+          {showQA && (
+            <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
+              <p className="text-xs text-gray-500 mb-2">Click a question to expand details</p>
+              {(report.qa_feedback || []).map((qa, i) => (
+                <QAItem key={i} qa={qa} index={i} />
               ))}
             </div>
-          </div>
-
-          {/* Question Feedback (Collapsible) */}
-          <div className="flex-1 bg-slate-800/60 rounded-xl border border-slate-700/50 flex flex-col min-h-[150px]">
-            <button
-              onClick={() => setShowFeedback(!showFeedback)}
-              className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-slate-700/30 transition"
-            >
-              <span className="text-white font-semibold text-xs">📝 Question-by-Question Feedback</span>
-              <span className="text-gray-400 text-xs">{showFeedback ? "▲" : "▼"}</span>
-            </button>
-            
-            {showFeedback && (
-              <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-3">
-                {qaFeedback.length > 0 ? qaFeedback.slice(0, 5).map((qa, i) => (
-                  <div key={i} className="bg-slate-700/30 rounded-lg p-2">
-                    <p className="text-blue-400 text-[10px] font-medium mb-1">Q{i + 1}: {qa.question.slice(0, 100)}...</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-red-500/10 rounded p-1.5 border border-red-500/20">
-                        <p className="text-red-400 text-[9px] font-medium mb-0.5">Your Answer:</p>
-                        <p className="text-gray-300 text-[10px]">{qa.user_answer.slice(0, 80)}...</p>
-                      </div>
-                      <div className="bg-green-500/10 rounded p-1.5 border border-green-500/20">
-                        <p className="text-green-400 text-[9px] font-medium mb-0.5">Better Answer:</p>
-                        <p className="text-gray-300 text-[10px]">
-                          {qa.better_answer?.slice(0, 80) || "Provide more detail using STAR method..."}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )) : (
-                  <p className="text-gray-500 text-xs text-center py-4">No Q&A feedback available</p>
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Footer */}
-      <p className="text-center text-gray-600 text-[10px] mt-3">AI Interview Bot • {new Date().toLocaleDateString()}</p>
+      <p className="text-center text-gray-600 text-[10px] mt-6">
+        AI Interview Bot • {new Date().toLocaleDateString()}
+      </p>
     </div>
   );
 }

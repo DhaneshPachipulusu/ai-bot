@@ -1,0 +1,54 @@
+{
+    "branch": "cse",
+    "name": "Computer Science",
+    "topics": [
+        {
+            "id": "programming",
+            "title": "Programming Languages",
+            "icon": "🖥️",
+            "description": "Python, Java, C++, JavaScript"
+        },
+        {
+            "id": "dsa",
+            "title": "Data Structures & Algorithms",
+            "icon": "📊",
+            "description": "Arrays, Trees, Graphs, Sorting"
+        },
+        {
+            "id": "web",
+            "title": "Web Technologies",
+            "icon": "🌐",
+            "description": "HTML, CSS, React, Node.js"
+        },
+        {
+            "id": "fullstack",
+            "title": "Full Stack Development",
+            "icon": "🔄",
+            "description": "MERN, MEAN, Django"
+        },
+        {
+            "id": "devops",
+            "title": "DevOps & Tools",
+            "icon": "🚀",
+            "description": "Docker, CI/CD, Git, Linux"
+        },
+        {
+            "id": "cloud",
+            "title": "Cloud Technologies",
+            "icon": "☁️",
+            "description": "AWS, Azure, GCP"
+        },
+        {
+            "id": "data-science",
+            "title": "Data Science & ML",
+            "icon": "🤖",
+            "description": "ML, Deep Learning, NLP"
+        },
+        {
+            "id": "databases",
+            "title": "Databases",
+            "icon": "🗄️",
+            "description": "SQL, MongoDB, Redis"
+        }
+    ]
+}

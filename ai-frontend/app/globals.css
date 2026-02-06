@@ -24,3 +24,259 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom Design System */
+@layer components {
+  .card-interactive {
+    @apply bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 transition-all duration-300 ease-out hover:border-blue-500/50 hover:bg-slate-800 hover:shadow-lg hover:-translate-y-1 cursor-pointer;
+  }
+
+  .btn-primary {
+    @apply px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all duration-200 ease-out active:scale-95 shadow-lg shadow-blue-500/20;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-gray-200 font-medium rounded-xl transition-all duration-200 ease-out active:scale-95;
+  }
+
+  .tab-base {
+    @apply px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ease-out;
+  }
+
+  .tab-active {
+    @apply bg-blue-600 text-white shadow-lg shadow-blue-500/20;
+  }
+
+  .tab-inactive {
+    @apply text-gray-400 hover:text-white hover:bg-slate-800;
+  }
+
+  /* Glass Theme Utilities */
+  .glass-panel {
+    @apply bg-slate-800/40 backdrop-blur-md border border-slate-700/50 shadow-xl;
+  }
+
+  .glass-panel-hover {
+    @apply transition-all duration-300 ease-out hover:bg-slate-800/60 hover:border-slate-600 hover:shadow-2xl hover:-translate-y-0.5;
+  }
+
+  .btn-glass {
+    @apply px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 hover:border-slate-600 rounded-xl text-sm text-gray-300 hover:text-white transition-all duration-200 ease-out backdrop-blur-sm;
+  }
+
+  /* Dashboard Enhanced Styles */
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.25), 0 0 40px rgba(59, 130, 246, 0.08);
+  }
+
+  .glow-blue-hover:hover {
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.35), 0 0 50px rgba(59, 130, 246, 0.15);
+  }
+
+  .stat-card {
+    @apply bg-slate-800/40 rounded-2xl p-7 border border-slate-700/40 backdrop-blur-sm transition-all duration-300 ease-out;
+  }
+
+  .stat-card:hover {
+    @apply border-slate-600/60 bg-slate-800/60 -translate-y-0.5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(148, 163, 184, 0.05);
+  }
+
+  .progress-bar-bg {
+    @apply h-1.5 bg-slate-700/80 rounded-full overflow-hidden;
+  }
+
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-700 ease-out;
+  }
+
+  .feedback-chip {
+    @apply px-2.5 py-1 text-xs font-medium rounded-full border transition-colors duration-200;
+  }
+
+  .topic-tag {
+    @apply px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-700/40 text-gray-400 border border-slate-600/40 transition-all duration-200 ease-out cursor-pointer;
+  }
+
+  .topic-tag:hover {
+    @apply bg-slate-600/50 text-gray-200 border-slate-500/50;
+  }
+
+  .trend-indicator {
+    @apply text-xs font-medium mt-1.5 tracking-wide;
+  }
+
+  .trend-up {
+    @apply text-emerald-400;
+  }
+
+  .trend-neutral {
+    @apply text-gray-500;
+  }
+
+  /* Section Headers */
+  .section-title {
+    @apply text-2xl font-semibold text-white tracking-tight;
+  }
+
+  /* Interview Card */
+  .interview-card {
+    @apply bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/40 p-6 transition-all duration-300 ease-out;
+  }
+
+  .interview-card:hover {
+    @apply border-slate-600/60 bg-slate-800/60;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Keyframe Animations */
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.25), 0 0 40px rgba(59, 130, 246, 0.08);
+  }
+
+  50% {
+    box-shadow: 0 0 25px rgba(59, 130, 246, 0.35), 0 0 50px rgba(59, 130, 246, 0.15);
+  }
+}
+
+.animate-glow {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Smooth text fade transition */
+@keyframes text-fade {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-text-fade {
+  animation: text-fade 5s ease-in-out infinite;
+}
+
+/* ================================== */
+/* APP LIVENESS & INTERACTION POLISH  */
+/* ================================== */
+
+/* Card Lift - Subtle hover elevation with soft glow */
+.card-lift {
+  @apply transition-all duration-200 ease-out;
+}
+
+.card-lift:hover {
+  @apply -translate-y-0.5;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(148, 163, 184, 0.05),
+    0 0 20px rgba(59, 130, 246, 0.04);
+}
+
+/* Button Press - Tactile feedback */
+.btn-press {
+  @apply transition-all duration-150 ease-out;
+}
+
+.btn-press:active {
+  @apply scale-[0.97];
+}
+
+/* Arrow Motion - Subtle shift on hover */
+.btn-arrow {
+  @apply transition-transform duration-200 ease-out;
+}
+
+.group:hover .btn-arrow,
+.btn-arrow-hover:hover .btn-arrow {
+  @apply translate-x-1;
+}
+
+/* Enhanced Interactive Elements */
+.interactive-glow {
+  @apply transition-all duration-200 ease-out;
+}
+
+.interactive-glow:hover {
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Focus ring for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:ring-offset-2 focus:ring-offset-slate-900;
+}
+
+/* Page Fade-In Animation */
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: page-fade-in 150ms ease-out forwards;
+}
+
+/* Smooth content reveal */
+@keyframes content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-content-reveal {
+  animation: content-reveal 200ms ease-out forwards;
+}
+
+/* Staggered animations for lists */
+.stagger-1 {
+  animation-delay: 50ms;
+}
+
+.stagger-2 {
+  animation-delay: 100ms;
+}
+
+.stagger-3 {
+  animation-delay: 150ms;
+}
+
+.stagger-4 {
+  animation-delay: 200ms;
+}

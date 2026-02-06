@@ -1,0 +1,42 @@
+{
+    "branch": "ece",
+    "name": "Electronics & Communication",
+    "topics": [
+        {
+            "id": "embedded",
+            "title": "Embedded Systems",
+            "icon": "📟",
+            "description": "Microcontrollers, RTOS, Firmware"
+        },
+        {
+            "id": "vlsi",
+            "title": "VLSI Design",
+            "icon": "💾",
+            "description": "Verilog, VHDL, ASIC, FPGA"
+        },
+        {
+            "id": "analog",
+            "title": "Analog Electronics",
+            "icon": "〰️",
+            "description": "Circuits, Op-Amps, Transistors"
+        },
+        {
+            "id": "digital",
+            "title": "Digital Electronics",
+            "icon": "🔢",
+            "description": "Logic Gates, Flip-Flops, Processors"
+        },
+        {
+            "id": "communication",
+            "title": "Communication Systems",
+            "icon": "📡",
+            "description": "Signals, Modulation, 5G/LTE"
+        },
+        {
+            "id": "iot",
+            "title": "Internet of Things",
+            "icon": "🌐",
+            "description": "Sensors, Actuators, Protocols"
+        }
+    ]
+}

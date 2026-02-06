@@ -1,0 +1,106 @@
+{
+    "topic": "Programming Languages",
+    "branch": "cse",
+    "notes": [
+        {
+            "id": "python",
+            "title": "Python",
+            "icon": "🐍",
+            "keyPoints": [
+                "Easy to learn, readable syntax",
+                "Dynamic typing, interpreted language",
+                "Rich ecosystem: NumPy, Pandas, Django, Flask",
+                "Great for automation, data science, web development"
+            ],
+            "mustKnow": [
+                "Variables, data types, operators",
+                "Control structures (if, for, while)",
+                "Functions and modules",
+                "OOP concepts (class, inheritance)",
+                "File handling and exception handling",
+                "List comprehension and generators"
+            ],
+            "practiceTopics": [
+                "Loops",
+                "Functions",
+                "OOP",
+                "File I/O",
+                "Error Handling"
+            ]
+        },
+        {
+            "id": "java",
+            "title": "Java",
+            "icon": "☕",
+            "keyPoints": [
+                "Platform independent (Write Once, Run Anywhere)",
+                "Strongly typed, object-oriented",
+                "Used in enterprise, Android development",
+                "Rich standard library and frameworks (Spring)"
+            ],
+            "mustKnow": [
+                "OOP principles (Encapsulation, Inheritance, Polymorphism)",
+                "Collections framework (ArrayList, HashMap)",
+                "Exception handling",
+                "Multithreading basics",
+                "JDBC for database connectivity"
+            ],
+            "practiceTopics": [
+                "OOP",
+                "Collections",
+                "Threads",
+                "JDBC"
+            ]
+        },
+        {
+            "id": "javascript",
+            "title": "JavaScript",
+            "icon": "🟨",
+            "keyPoints": [
+                "Language of the web (frontend + backend)",
+                "Event-driven, asynchronous programming",
+                "ES6+ features: arrow functions, promises, async/await",
+                "Frameworks: React, Node.js, Vue, Angular"
+            ],
+            "mustKnow": [
+                "Variables (let, const, var)",
+                "Functions and closures",
+                "DOM manipulation",
+                "Promises and async/await",
+                "ES6 features (destructuring, spread operator)",
+                "Event handling"
+            ],
+            "practiceTopics": [
+                "DOM",
+                "Events",
+                "Async",
+                "Fetch API",
+                "ES6"
+            ]
+        },
+        {
+            "id": "cpp",
+            "title": "C++",
+            "icon": "⚡",
+            "keyPoints": [
+                "High performance, low-level control",
+                "Used in systems programming, game development",
+                "Supports OOP and procedural programming",
+                "STL (Standard Template Library)"
+            ],
+            "mustKnow": [
+                "Pointers and memory management",
+                "OOP concepts",
+                "STL containers (vector, map, set)",
+                "Templates and generics",
+                "File I/O"
+            ],
+            "practiceTopics": [
+                "Pointers",
+                "OOP",
+                "STL",
+                "Memory Management"
+            ]
+        }
+    ]
+}

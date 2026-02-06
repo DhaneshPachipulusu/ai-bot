@@ -11,7 +11,7 @@ import os
 from app import database as db
 
 # Import routers
-from app.routes import resume, interview, career
+from app.routes import resume, interview, career, learning
 from app.routes import analysis
 from app.routes.interview_v2 import router as interview_v2_router
 
@@ -58,6 +58,7 @@ app.include_router(resume.router, prefix="/api")
 app.include_router(interview.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(career.router, prefix="/api")
+app.include_router(learning.router, prefix="/api")
 app.include_router(interview_v2_router, prefix="/api")
 
 # Also register interview_v2 without /api prefix (fallback for frontend issues)
