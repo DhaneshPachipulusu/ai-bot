@@ -69,6 +69,11 @@ export default function InterviewBox() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startedRef = useRef(false);
 
+  // Mirror state into refs so the stable recognition handlers never read stale values
+  const listeningRef = useRef(false);
+  const isPausedRef = useRef(false);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+
   // Auto-mic refs
   const micCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -381,6 +386,7 @@ export default function InterviewBox() {
   const startListeningAuto = () => {
     if (isPaused || isCompleted || listening) return;
 
+    listeningRef.current = true;
     setListening(true);
     setAiState("listening");
     lastSoundTimeRef.current = Date.now();
@@ -463,12 +469,23 @@ export default function InterviewBox() {
     setAiState("speaking");
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const voices = speechSynthesis.getVoices();
-    const indianVoice = voices.find((v) => v.lang === "en-IN" || v.name.toLowerCase().includes("india"));
-    const englishVoice = voices.find((v) => v.lang.startsWith("en"));
+    const voices = voicesRef.current.length ? voicesRef.current : speechSynthesis.getVoices();
+    const find = (re: RegExp) => voices.find((v) => re.test(v.name) || re.test(v.lang));
+    // INDIAN ACCENT first: natural online en-IN voices -> classic en-IN -> any en-IN ->
+    // en-GB (closer to Indian than US) -> any English.
+    const bestVoice =
+      find(/Neerja|Prabhat/i) ||                                       // MS natural en-IN (online)
+      voices.find((v) => v.lang === "en-IN" && /Natural|Online/i.test(v.name)) ||
+      find(/Heera|Ravi/i) ||                                           // MS classic en-IN
+      find(/Google.*(India|हिन्दी)/i) ||
+      voices.find((v) => v.lang === "en-IN") ||
+      voices.find((v) => /india/i.test(v.name)) ||
+      voices.find((v) => v.lang === "en-GB") ||
+      voices.find((v) => v.lang?.startsWith("en")) ||
+      null;
 
-    utterance.voice = indianVoice || englishVoice || null;
-    utterance.lang = "en-IN";
+    utterance.voice = bestVoice;
+    utterance.lang = bestVoice?.lang || "en-IN";
     utterance.rate = 0.95;
     utterance.pitch = 1.0;
 
@@ -507,6 +524,29 @@ export default function InterviewBox() {
 
   // ==================== STT ====================
 
+  // Keep refs in sync so the stable recognition handlers always read current state
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+
+  // Load TTS voices once. getVoices() is empty until the browser loads them async,
+  // so we also listen for "voiceschanged".
+  useEffect(() => {
+    const load = () => {
+      voicesRef.current = window.speechSynthesis.getVoices();
+      const en = voicesRef.current.filter((v) => v.lang?.toLowerCase().startsWith("en"));
+      if (en.length) {
+        console.log("🔊 Available English voices:", en.map((v) => `${v.name} (${v.lang})`));
+        console.log("🇮🇳 Indian (en-IN) voices:", en.filter((v) => v.lang === "en-IN").map((v) => v.name));
+      }
+    };
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  // Create ONE SpeechRecognition instance for the whole session.
+  // Recreating it on every `listening` change left orphaned instances running,
+  // which blocked the mic from restarting after the first answer.
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
@@ -531,8 +571,9 @@ export default function InterviewBox() {
       }
     };
 
+    // Browsers auto-stop recognition periodically; restart while we still want to listen.
     rec.onend = () => {
-      if (listening && !isPaused) {
+      if (listeningRef.current && !isPausedRef.current) {
         try { rec.start(); } catch { }
       } else {
         setListening(false);
@@ -540,22 +581,36 @@ export default function InterviewBox() {
       }
     };
 
+    rec.onerror = (e: any) => {
+      // no-speech / aborted are recoverable (onend restarts). Permission errors are not.
+      if (e?.error === "not-allowed" || e?.error === "service-not-allowed") {
+        listeningRef.current = false;
+        setListening(false);
+      }
+    };
+
     recognitionRef.current = rec;
-  }, [listening, isPaused]);
+    return () => {
+      try { rec.stop(); } catch { }
+      recognitionRef.current = null;
+    };
+  }, []);
 
   const toggleListening = () => {
     cancelMicCountdown();
 
     if (listening) {
+      listeningRef.current = false;
       recognitionRef.current?.stop();
       setListening(false);
       setAiState("ready");
       stopSilenceDetection();
     } else {
+      listeningRef.current = true;
       setListening(true);
       setAiState("listening");
       lastSoundTimeRef.current = Date.now();
-      recognitionRef.current?.start();
+      try { recognitionRef.current?.start(); } catch { }
       startSilenceDetection();
     }
   };
@@ -569,6 +624,7 @@ export default function InterviewBox() {
     stopSilenceDetection();
 
     if (listening) {
+      listeningRef.current = false;
       recognitionRef.current?.stop();
       setListening(false);
     }
@@ -650,6 +706,7 @@ export default function InterviewBox() {
       cancelMicCountdown();
       stopSilenceDetection();
       speechSynthesis.cancel();
+      listeningRef.current = false;
       recognitionRef.current?.stop();
       setListening(false);
     }

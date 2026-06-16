@@ -135,34 +135,12 @@ export default function InterviewSetupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col relative">
+    <div className="relative animate-page-in">
       {/* Particle Background - matches dashboard */}
       <ParticleBackground />
 
-      {/* Header */}
-      <header className="px-6 py-5 relative z-10">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center text-white font-semibold text-sm shadow-lg shadow-blue-500/20">
-              AI
-            </div>
-            <div>
-              <h1 className="text-base font-semibold text-white tracking-tight">AI Interview</h1>
-              <p className="text-xs text-gray-500">Setup Session</p>
-            </div>
-          </div>
-          <button
-            onClick={() => router.push("/")}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-slate-800/80 transition-all duration-200 ease-out group"
-          >
-            <span className="group-hover:-translate-x-0.5 transition-transform duration-200 ease-out">←</span>
-            <span className="font-medium">Back</span>
-          </button>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="flex-1 max-w-5xl mx-auto px-6 py-6 w-full relative z-10">
+      <div className="w-full relative z-10">
         {/* Page Header */}
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-4xl font-semibold text-white mb-3 tracking-tight">
@@ -469,7 +447,7 @@ export default function InterviewSetupPage() {
             </div>
           ))}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

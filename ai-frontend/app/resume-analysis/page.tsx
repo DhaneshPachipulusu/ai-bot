@@ -4,7 +4,7 @@ import ResumeAnalysis from "@/components/ResumeAnalysis";
 
 export default function ResumeAnalysisPage() {
   return (
-    <div className="min-h-screen py-12 px-4">
+    <div className="w-full">
       <ResumeAnalysis />
     </div>
   );

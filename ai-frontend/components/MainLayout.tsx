@@ -14,8 +14,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const user = getUser();
   const { jobs, hasJobs, jobCount, dismissed, dismissJobs } = useFresherJobs();
 
-  // Fullscreen pages (no navbar)
-  const fullscreenPages = ["/login", "/interview", "/report", "/reports"];
+  // Fullscreen pages (no navbar) - only truly immersive screens:
+  // login, the single-report detail view, and the live interview session.
+  // The reports list and interview setup keep the navbar for easy navigation.
+  const fullscreenPages = ["/login", "/report", "/interview/live"];
   const isFullscreen = fullscreenPages.some(page => pathname === page || pathname?.startsWith(page + "/"));
 
   if (isFullscreen) {
@@ -37,7 +39,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       {/* DARK NAVBAR */}
       <nav className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-700/50">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="w-full px-6">
           <div className="flex items-center justify-between h-14">
 
             {/* Logo */}
@@ -264,13 +266,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       </nav>
 
       {/* MAIN CONTENT */}
-      <main className="max-w-7xl mx-auto px-6 py-8 animate-page-in">
+      <main className="w-full px-6 py-8 animate-page-in">
         {children}
       </main>
 
       {/* FOOTER */}
       <footer className="mt-auto py-6 border-t border-slate-700/50">
-        <div className="max-w-7xl mx-auto px-6 text-center text-sm text-gray-500">
+        <div className="w-full px-6 text-center text-sm text-gray-500">
           AI Interview Bot © {new Date().getFullYear()}
         </div>
       </footer>

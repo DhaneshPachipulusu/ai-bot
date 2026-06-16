@@ -7,25 +7,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    _METRICS_ENABLED = True
+except ImportError:
+    _METRICS_ENABLED = False
+
 # Import database
 from app import database as db
+from app import config
 
 # Import routers
-from app.routes import resume, interview, career, learning
+from app.routes import resume, interview, career, learning, resume_builder
 from app.routes import analysis
 from app.routes.interview_v2 import router as interview_v2_router
 
 
 app = FastAPI(title="AI Interview Bot")
 
+if _METRICS_ENABLED:
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://ai-bot-8xzr.vercel.app"
-    ],
+    allow_origins=config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,7 +46,7 @@ app.add_middleware(
 def startup_event():
     print("🚀 Starting AI Interview Bot API...")
     
-    if not os.path.exists("interview_bot.db"):
+    if not os.path.exists(config.DATABASE_PATH):
         print("🔧 Database not found. Creating...")
         db.setup_database()
     else:
@@ -59,6 +65,7 @@ app.include_router(interview.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(career.router, prefix="/api")
 app.include_router(learning.router, prefix="/api")
+app.include_router(resume_builder.router, prefix="/api")
 app.include_router(interview_v2_router, prefix="/api")
 
 # Also register interview_v2 without /api prefix (fallback for frontend issues)

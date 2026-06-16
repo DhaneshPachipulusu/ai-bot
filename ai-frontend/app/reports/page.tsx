@@ -52,26 +52,6 @@ export default function ReportsPage() {
     return num !== null ? num : 0;
   };
 
-  // Check if metric data is available
-  const hasMetricData = (report: Report): boolean => {
-    return scoreToNumber(report.fluency) !== null ||
-      scoreToNumber(report.technical_depth) !== null ||
-      scoreToNumber(report.confidence) !== null;
-  };
-
-  const getScoreColor = (score: number | null) => {
-    if (score === null) return "text-gray-500 bg-slate-700/30";
-    if (score >= 7) return "text-green-400 bg-green-500/20";
-    if (score >= 5) return "text-yellow-400 bg-yellow-500/20";
-    return "text-red-400 bg-red-500/20";
-  };
-
-  const getScoreBg = (score: number) => {
-    if (score >= 7) return "from-green-500 to-emerald-500";
-    if (score >= 5) return "from-yellow-500 to-orange-500";
-    return "from-red-500 to-pink-500";
-  };
-
   const getScoreBarBg = (score: number) => {
     if (score >= 7) return "bg-green-500";
     if (score >= 5) return "bg-yellow-500";
@@ -80,9 +60,17 @@ export default function ReportsPage() {
 
   const getScoreTextColor = (score: number | null) => {
     if (score === null) return "text-gray-500";
-    if (score >= 7) return "text-green-400";
-    if (score >= 5) return "text-yellow-400";
-    return "text-red-400";
+    if (score >= 7) return "text-emerald-400";
+    if (score >= 5) return "text-amber-400";
+    return "text-rose-400";
+  };
+
+  // Colored ring border for the score circle (calm accent on a dark card)
+  const getScoreRing = (score: number | null) => {
+    if (score === null) return "border-slate-600/60";
+    if (score >= 7) return "border-emerald-500/50";
+    if (score >= 5) return "border-amber-500/50";
+    return "border-rose-500/50";
   };
 
   // Calculate progress over last N interviews
@@ -183,8 +171,8 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="animate-page-in">
+        <div className="w-full">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2">Interview Reports</h1>
             <p className="text-gray-400">Review your past interview performance and track improvement</p>
@@ -206,8 +194,8 @@ export default function ReportsPage() {
   const overallStatus = getOverallStatus(avgScore);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 px-6 py-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="animate-page-in">
+      <div className="w-full">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">Interview Reports</h1>
@@ -293,74 +281,62 @@ export default function ReportsPage() {
                       } ${isOlder ? 'opacity-75 hover:opacity-100' : ''}`}
                     onClick={() => viewReport(report.interview_id)}
                   >
-                    {/* Score Header */}
-                    <div className={`bg-gradient-to-r ${getScoreBg(score)} ${isOlder ? 'p-3' : 'p-4'} text-white relative`}>
-                      {/* Latest Badge */}
+                    {/* Score Header - dark card with a colored score ring */}
+                    <div className={`${isOlder ? 'p-3' : 'p-4'} relative`}>
                       {isLatest && (
-                        <span className="absolute top-2 right-2 px-2 py-0.5 bg-white/20 backdrop-blur-sm text-white text-[10px] font-medium rounded-full">
-                          Latest Interview
+                        <span className="absolute top-3 right-3 px-2 py-0.5 bg-blue-500/15 text-blue-300 text-[10px] font-medium rounded-full border border-blue-500/30">
+                          Latest
                         </span>
                       )}
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-white/80 text-xs">Interview #{reports.length - index}</p>
-                          <p className={`font-bold ${isOlder ? 'text-xl' : 'text-2xl'}`}>{score.toFixed(1)}/10</p>
+                          <p className="text-gray-400 text-xs">Interview #{reports.length - index}</p>
+                          <p className="text-gray-500 text-xs mt-1">
+                            {report.created_at ? new Date(report.created_at).toLocaleDateString() : "Recently"}
+                          </p>
                         </div>
-                        <div className={`${isOlder ? 'w-10 h-10' : 'w-12 h-12'} bg-white/20 rounded-full flex items-center justify-center`}>
-                          <svg className={`${isOlder ? 'w-5 h-5' : 'w-6 h-6'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
+                        <div className={`${isOlder ? 'w-12 h-12' : 'w-14 h-14'} rounded-full border-4 ${getScoreRing(score)} flex items-center justify-center shrink-0`}>
+                          <span className={`${isOlder ? 'text-sm' : 'text-base'} font-bold ${getScoreTextColor(score)}`}>
+                            {score.toFixed(1)}
+                          </span>
                         </div>
                       </div>
 
                       {/* Score Progress Bar */}
-                      <div className="mt-2 h-1 bg-white/20 rounded-full overflow-hidden">
+                      <div className="mt-3 h-1 bg-slate-700/60 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-white/60 rounded-full transition-all"
+                          className={`h-full ${getScoreBarBg(score)} rounded-full transition-all`}
                           style={{ width: `${(score / 10) * 100}%` }}
                         />
                       </div>
                     </div>
 
                     {/* Details */}
-                    <div className="p-4 bg-slate-800">
-                      {/* Mini Metrics - handle missing data */}
-                      {hasMetricData(report) ? (
-                        <div className="grid grid-cols-3 gap-2 mb-3">
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">Fluency</p>
-                            <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.fluency))}`}>
-                              {scoreToNumber(report.fluency) !== null ? scoreToNumber(report.fluency)!.toFixed(0) : '—'}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">Technical</p>
-                            <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.technical_depth))}`}>
-                              {scoreToNumber(report.technical_depth) !== null ? scoreToNumber(report.technical_depth)!.toFixed(0) : '—'}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-xs text-gray-400">Confidence</p>
-                            <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.confidence))}`}>
-                              {scoreToNumber(report.confidence) !== null ? scoreToNumber(report.confidence)!.toFixed(0) : '—'}
-                            </p>
-                          </div>
+                    <div className="px-4 pb-4">
+                      {/* Mini Metrics - dashes when a metric is missing (no broken-looking text) */}
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">Fluency</p>
+                          <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.fluency))}`}>
+                            {scoreToNumber(report.fluency) !== null ? scoreToNumber(report.fluency)!.toFixed(0) : '—'}
+                          </p>
                         </div>
-                      ) : (
-                        <div className="mb-3 py-2 text-center">
-                          <p className="text-xs text-gray-500">Detailed metrics not available</p>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">Technical</p>
+                          <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.technical_depth))}`}>
+                            {scoreToNumber(report.technical_depth) !== null ? scoreToNumber(report.technical_depth)!.toFixed(0) : '—'}
+                          </p>
                         </div>
-                      )}
-
-                      {/* Date only - no status label (shown once at top) */}
-                      <div className="flex items-center justify-end">
-                        <span className="text-xs text-gray-400">
-                          {report.created_at ? new Date(report.created_at).toLocaleDateString() : "Recently"}
-                        </span>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">Confidence</p>
+                          <p className={`text-sm font-semibold ${getScoreTextColor(scoreToNumber(report.confidence))}`}>
+                            {scoreToNumber(report.confidence) !== null ? scoreToNumber(report.confidence)!.toFixed(0) : '—'}
+                          </p>
+                        </div>
                       </div>
 
                       {/* View Button */}
-                      <button className="w-full mt-3 py-2 bg-slate-700/50 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition">
+                      <button className="w-full py-2 bg-slate-700/50 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition">
                         View Report →
                       </button>
                     </div>

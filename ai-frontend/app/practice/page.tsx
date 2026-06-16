@@ -23,7 +23,7 @@ export default function PracticePage() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-6 pb-10">
+    <div className="w-full pb-10">
       {/* Header */}
       <div className="mb-10">
         <h1 className="text-3xl md:text-4xl font-semibold text-white mb-3 tracking-tight">

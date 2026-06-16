@@ -15,7 +15,7 @@ from typing import Optional
 
 AI_AVAILABLE = False
 client = None
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 try:
     from app.config import client as gemini_client, USE_MOCK_AI, GEMINI_MODEL as MODEL
@@ -202,7 +202,23 @@ def ai_interview_feedback(qa_pairs: list) -> dict:
     )
 
     prompt = f"""
-Analyze this technical interview and return VALID JSON only.
+You are evaluating a technical interview. Return VALID JSON only.
+
+## IMPORTANT - HOW THE ANSWERS WERE CAPTURED:
+The candidate's answers below were AUTOMATICALLY TRANSCRIBED from spoken audio using
+browser speech-to-text, which frequently mis-hears technical terms. Read through obvious
+mis-transcriptions to the INTENDED technical term, for example:
+- "Mongo baby" -> MongoDB
+- "embroidery model" -> embedding model
+- "Croma" / "Croma didi" -> Chroma
+- "rat pipeline" / "rag pipeline" -> RAG pipeline
+- "vectors baby" / "vector baby" -> vector database
+- "swag" / "swag systems" -> stack / systems
+
+Do NOT penalize pronunciation, spelling, grammar, or transcription artifacts, and NEVER list
+"pronunciation", "spelling", or "unclear words" as a weakness - those are speech-to-text noise,
+NOT the candidate. Judge ONLY the candidate's actual technical understanding and the substance
+of what they meant to say.
 
 {qa_text}
 
@@ -222,6 +238,7 @@ Return JSON in this EXACT format:
 }}
 
 IMPORTANT: Include feedback for ALL {len(qa_pairs)} questions in per_question_feedback.
+Base "improvements" and "score" on technical content only, never on how words were transcribed.
 """
 
     raw = call_gemini(prompt)

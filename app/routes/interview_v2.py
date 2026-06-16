@@ -25,7 +25,7 @@ os.makedirs("data/conversations", exist_ok=True)
 
 AI_AVAILABLE = False
 client = None
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 try:
     from app.config import client as gemini_client, USE_MOCK_AI, GEMINI_MODEL as MODEL
@@ -132,6 +132,122 @@ def get_time_greeting(candidate_name: str) -> str:
     return random.choice(greetings)
 
 
+def flatten_skills(skills) -> list:
+    """Normalize skills into a flat list of strings.
+
+    Skills can arrive as a flat list (from /upload-resume) or as a nested dict
+    (from the resume-builder schema: {languages: [...], databases: [...], ...}).
+    Without this, dict-shaped skills silently break the keyword logic downstream.
+    """
+    if isinstance(skills, dict):
+        flat = []
+        for value in skills.values():
+            if isinstance(value, list):
+                flat.extend(str(v) for v in value if v)
+            elif value:
+                flat.append(str(value))
+        return flat
+    if isinstance(skills, list):
+        return [str(s) for s in skills if s]
+    return []
+
+
+def build_resume_context(interview: dict) -> str:
+    """Build a compact summary of the candidate's actual resume.
+
+    This is what makes the interview genuinely resume-based: the model can ask
+    about *their* projects/experience by name instead of generic placeholders.
+    """
+    resume = interview.get("parsed_resume") or {}
+    parts = []
+
+    # Experience / internships
+    exp_lines = []
+    for exp in (resume.get("experience") or [])[:3]:
+        if not isinstance(exp, dict):
+            continue
+        title = exp.get("title") or exp.get("role") or ""
+        company = exp.get("company") or ""
+        date = exp.get("date") or ""
+        header = " | ".join(p for p in [title, company, date] if p)
+        bullets = exp.get("responsibilities") or exp.get("bullets") or []
+        if isinstance(bullets, str):
+            bullets = [bullets]
+        line = f"- {header}" if header else "-"
+        if bullets:
+            line += ": " + "; ".join(b for b in bullets[:2] if b)
+        elif exp.get("description"):
+            line += ": " + str(exp["description"])[:160]
+        if line.strip("- "):
+            exp_lines.append(line)
+    if exp_lines:
+        parts.append("EXPERIENCE / INTERNSHIPS:\n" + "\n".join(exp_lines))
+
+    # Projects
+    proj_lines = []
+    for proj in (resume.get("projects") or [])[:3]:
+        if not isinstance(proj, dict):
+            continue
+        name = proj.get("name") or proj.get("title") or ""
+        tech = proj.get("technologies") or proj.get("tech") or ""
+        desc = proj.get("description") or ""
+        if not desc and isinstance(proj.get("bullets"), list):
+            desc = "; ".join(str(b) for b in proj["bullets"][:2] if b)
+        line = f"- {name}" if name else "-"
+        if tech:
+            line += f" (tech: {tech})"
+        if desc:
+            line += f": {str(desc)[:160]}"
+        if line.strip("- "):
+            proj_lines.append(line)
+    if proj_lines:
+        parts.append("PROJECTS:\n" + "\n".join(proj_lines))
+
+    # Education
+    edu_lines = []
+    for edu in (resume.get("education") or [])[:2]:
+        if not isinstance(edu, dict):
+            continue
+        degree = edu.get("degree") or ""
+        inst = edu.get("institution") or ""
+        score = edu.get("score") or edu.get("cgpa") or ""
+        bits = [b for b in [degree, inst, score] if b]
+        line = "- " + (" | ".join(bits) if bits else str(edu.get("description") or "")[:120])
+        if line.strip("- "):
+            edu_lines.append(line)
+    if edu_lines:
+        parts.append("EDUCATION:\n" + "\n".join(edu_lines))
+
+    summary = resume.get("summary") or ""
+    if summary:
+        parts.append("SUMMARY: " + str(summary)[:200])
+
+    if not parts:
+        return "No detailed resume on file - ask questions based on the target role and listed skills."
+    return "\n\n".join(parts)
+
+
+def get_calibration_guidance(difficulty: str, experience_level: str) -> str:
+    """Tell the interviewer how hard to push, based on chosen difficulty + level."""
+    difficulty = (difficulty or "auto").lower()
+    experience_level = (experience_level or "fresher").lower()
+
+    level_note = {
+        "fresher": "Candidate is a FRESHER/entry-level. Focus on fundamentals, college projects, internships, and how they think and learn. Do not expect production-scale experience.",
+        "junior": "Candidate is JUNIOR with some experience. Mix fundamentals with practical application.",
+        "mid": "Candidate is MID-LEVEL. Expect solid practical depth and some design/trade-off reasoning.",
+        "senior": "Candidate is SENIOR. Probe architecture, trade-offs, scale, and decision-making.",
+    }.get(experience_level, "Calibrate to the candidate's apparent experience.")
+
+    diff_note = {
+        "easy": "DIFFICULTY EASY: keep questions supportive and foundational, one concept at a time, stay encouraging.",
+        "medium": "DIFFICULTY MEDIUM: standard interview depth with natural follow-ups when answers are thin.",
+        "hard": "DIFFICULTY HARD: probe deeply - ask for trade-offs, edge cases, and the 'why' behind choices; politely challenge vague answers.",
+    }.get(difficulty, "DIFFICULTY AUTO: calibrate to the candidate's experience level and how well they are answering.")
+
+    return f"{level_note}\n{diff_note}"
+
+
 def generate_dynamic_response(interview: dict, candidate_answer: str) -> dict:
     """
     Generate the next question dynamically based on conversation context.
@@ -153,8 +269,22 @@ def generate_dynamic_response(interview: dict, candidate_answer: str) -> dict:
     max_questions = interview.get("max_questions", 10)
     skills = interview.get("skills", [])[:8]
     target_role = interview.get("target_role", "Software Developer")
-    
+    candidate_name = (interview.get("candidate_name") or "the candidate").split()[0]
+
+    resume_context = build_resume_context(interview)
+    calibration = get_calibration_guidance(
+        interview.get("difficulty", "auto"),
+        interview.get("experience_level", "fresher"),
+    )
+
     prompt = f"""You are Alex, a friendly technical interviewer conducting a real interview for a {target_role} position.
+You are interviewing {candidate_name}.
+
+## CANDIDATE'S RESUME (use this to ask SPECIFIC, personalized questions):
+{resume_context}
+
+## CALIBRATION:
+{calibration}
 
 ## CONVERSATION SO FAR:
 {conv_text}
@@ -181,6 +311,12 @@ Analyze the candidate's answer and decide what to do next.
 greeting → self_intro → background → skills_interest → technical → project → behavioral → closing
 
 Only advance stage when current topic is adequately covered.
+
+## RESUME-GROUNDING RULES (IMPORTANT):
+- In the 'project' stage, ask about a SPECIFIC project from their resume BY NAME (use the actual project title and tech listed) - never a generic "tell me about a project".
+- In the 'technical' stage, anchor questions to the skills/tech they actually listed or used in those projects.
+- In 'background'/'experience', reference their actual company/internship/role when one exists.
+- Never invent projects, companies, or tech the resume does not mention. If the resume lacks detail for a stage, ask a general role-appropriate question instead.
 
 ## RULES:
 - Ask ONLY ONE question
@@ -429,7 +565,7 @@ def start_interview(request: StartInterviewRequest):
     candidate_name = "Candidate"
     
     if request.mode == "resume" and request.parsed_resume:
-        skills = request.parsed_resume.get("skills", [])
+        skills = flatten_skills(request.parsed_resume.get("skills", []))
         candidate_name = request.parsed_resume.get("name", "Candidate")
     
     # IMPORTANT: Use user's explicit target_role if provided
@@ -461,6 +597,7 @@ def start_interview(request: StartInterviewRequest):
         "candidate_name": candidate_name,
         "skills": skills,
         "experience_level": request.experience_level,
+        "difficulty": request.difficulty,
         "max_questions": request.max_questions,
         "max_duration_mins": request.max_duration_mins,
         # Conversational flow - no pre-generated questions

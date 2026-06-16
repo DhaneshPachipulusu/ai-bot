@@ -110,33 +110,42 @@ function CollapsibleSection({
 
   if (items.length === 0) return null;
 
-  const colorClasses: Record<string, { bg: string; border: string; text: string }> = {
-    red: { bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-400" },
-    yellow: { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-400" },
-    blue: { bg: "bg-blue-500/10", border: "border-blue-500/20", text: "text-blue-400" },
-    green: { bg: "bg-green-500/10", border: "border-green-500/20", text: "text-green-400" },
+  const dot: Record<string, string> = {
+    red: "bg-red-400",
+    yellow: "bg-amber-400",
+    blue: "bg-sky-400",
+    green: "bg-emerald-400",
   };
-
-  const colors = colorClasses[color] || colorClasses.blue;
+  const dotClass = dot[color] || dot.blue;
 
   return (
-    <div className={`${colors.bg} border ${colors.border} rounded-xl overflow-hidden ${priority ? 'ring-1 ring-red-500/30' : ''}`}>
+    <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-colors hover:border-slate-600/70">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-slate-700/20 transition-colors"
       >
-        <div className="flex items-center gap-2">
-          <h4 className={`${colors.text} text-xs font-semibold`}>{title}</h4>
-          {hint && <span className="text-[10px] text-gray-500 bg-slate-700/50 px-1.5 py-0.5 rounded">{hint}</span>}
+        <div className="flex items-center gap-3">
+          <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+          <h4 className="text-sm font-semibold text-gray-200">{title}</h4>
+          <span className="text-xs text-gray-500">({items.length})</span>
+          {hint && <span className="text-[10px] text-gray-400 bg-slate-700/50 px-2 py-0.5 rounded-full">{hint}</span>}
         </div>
-        <span className={`text-xs ${colors.text}`}>{isOpen ? "▲" : "▼"}</span>
+        <svg
+          className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
       </button>
 
       {isOpen && (
-        <div className="px-3 pb-3">
-          <ul className="text-xs text-gray-300 space-y-1">
+        <div className="px-5 pb-4">
+          <ul className="space-y-2.5">
             {items.map((item, idx) => (
-              <li key={idx}>• {item}</li>
+              <li key={idx} className="flex items-start gap-2.5 text-sm text-gray-300 leading-relaxed">
+                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full ${dotClass} shrink-0`} />
+                <span>{item}</span>
+              </li>
             ))}
           </ul>
         </div>
@@ -163,7 +172,12 @@ function QAItem({ qa, index }: { qa: QAFeedback; index: number }) {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <AnswerBadge score={qa.score} />
-          <span className="text-gray-500 text-xs">{isExpanded ? "▲" : "▼"}</span>
+          <svg
+            className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
       </button>
 
@@ -330,13 +344,13 @@ export default function ReportPage() {
   const readiness = getReadinessInfo(report.overall_score);
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 text-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 sm:p-6 text-white">
       {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-lg font-bold">Interview Report</h1>
+      <div className="flex justify-between items-center mb-5">
+        <h1 className="text-2xl font-bold tracking-tight">Interview Report</h1>
         <div className="flex gap-2">
-          <Link href="/interview" className="px-3 py-1.5 bg-blue-600 rounded-lg text-xs font-medium hover:bg-blue-500">New Interview</Link>
-          <Link href="/reports" className="px-3 py-1.5 bg-slate-700 rounded-lg text-xs font-medium hover:bg-slate-600">All Reports</Link>
+          <Link href="/interview" className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl text-sm font-medium hover:from-blue-500 hover:to-indigo-500 transition-all shadow-lg shadow-blue-500/20">New Interview</Link>
+          <Link href="/reports" className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm font-medium hover:bg-slate-700 transition-colors">All Reports</Link>
         </div>
       </div>
 
@@ -385,9 +399,10 @@ export default function ReportPage() {
       ========================================== */}
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         {/* Strengths - Calm styling */}
-        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-          <h4 className="text-green-400 text-sm font-semibold mb-3 flex items-center gap-2">
-            <span>✓</span> Strengths
+        <div className="bg-emerald-500/[0.07] border border-emerald-500/20 rounded-2xl p-5">
+          <h4 className="text-emerald-300 text-sm font-semibold mb-4 flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-xs">✓</span>
+            Strengths
           </h4>
           <ul className="text-sm text-gray-300 space-y-2">
             {(report.strengths || []).slice(0, 5).map((s, i) => (
@@ -400,10 +415,11 @@ export default function ReportPage() {
         </div>
 
         {/* Must Improve - Emphasized styling */}
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 ring-1 ring-red-500/20">
-          <h4 className="text-red-400 text-sm font-semibold mb-3 flex items-center gap-2">
-            <span>🔴</span> Must Improve
-            <span className="text-[10px] text-gray-500 bg-slate-700/50 px-2 py-0.5 rounded ml-auto">Focus here first</span>
+        <div className="bg-red-500/[0.07] border border-red-500/25 rounded-2xl p-5">
+          <h4 className="text-red-300 text-sm font-semibold mb-4 flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-lg bg-red-500/15 flex items-center justify-center text-red-400 text-xs">!</span>
+            Must Improve
+            <span className="text-[10px] text-gray-400 bg-slate-700/50 px-2 py-0.5 rounded-full ml-auto">Focus here first</span>
           </h4>
           {mustImprove.length > 0 ? (
             <ul className="text-sm text-gray-300 space-y-2">
@@ -426,7 +442,7 @@ export default function ReportPage() {
       <div className="space-y-3">
         {/* Should Improve - Collapsed */}
         <CollapsibleSection
-          title="🟡 Should Improve"
+          title="Should Improve"
           items={shouldImprove}
           color="yellow"
           defaultOpen={false}
@@ -434,7 +450,7 @@ export default function ReportPage() {
 
         {/* Advanced - Collapsed */}
         <CollapsibleSection
-          title="🔵 Advanced"
+          title="Advanced"
           items={advancedImprove}
           color="blue"
           defaultOpen={false}
@@ -442,20 +458,29 @@ export default function ReportPage() {
 
         {/* Suggestions - Collapsed */}
         <CollapsibleSection
-          title="💡 Suggestions"
+          title="Suggestions"
           items={report.suggestions || []}
-          color="blue"
+          color="green"
           defaultOpen={false}
         />
 
         {/* Question-by-Question Feedback - Collapsed */}
-        <div className="bg-slate-800/60 rounded-xl border border-slate-700">
+        <div className="bg-slate-800/40 rounded-2xl border border-slate-700/50">
           <button
-            className="w-full px-4 py-3 flex justify-between items-center text-sm font-medium hover:bg-slate-700/30 transition-colors rounded-t-xl"
+            className="w-full px-5 py-4 flex justify-between items-center text-sm font-semibold hover:bg-slate-700/20 transition-colors rounded-2xl"
             onClick={() => setShowQA(!showQA)}
           >
-            <span>📝 Question-by-Question Feedback ({(report.qa_feedback || []).length} questions)</span>
-            <span className="text-gray-400">{showQA ? "▲" : "▼"}</span>
+            <div className="flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-indigo-400" />
+              <span className="text-gray-200">Question-by-Question Feedback</span>
+              <span className="text-xs text-gray-500">({(report.qa_feedback || []).length})</span>
+            </div>
+            <svg
+              className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${showQA ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
           </button>
 
           {showQA && (

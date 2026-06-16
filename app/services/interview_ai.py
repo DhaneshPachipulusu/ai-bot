@@ -9,7 +9,7 @@ import re
 from typing import Optional
 from datetime import datetime
 
-from app.config import USE_MOCK_AI, client
+from app.config import USE_MOCK_AI, client, GEMINI_MODEL
 from app.models.interview_context import (
     InterviewContext,
     InterviewStage,
@@ -61,7 +61,7 @@ def generate_interviewer_response(
         
         # Call AI
         response = client.models.generate_content(
-            model="models/gemini-2.0-flash-lite",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
         
@@ -101,7 +101,7 @@ def analyze_answer(
         prompt = build_analysis_prompt(question, answer, stage, topic)
         
         response = client.models.generate_content(
-            model="models/gemini-2.0-flash-lite",
+            model=GEMINI_MODEL,
             contents=prompt,
         )
         

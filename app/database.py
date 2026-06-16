@@ -3,7 +3,9 @@ from datetime import datetime
 import json
 import os
 
-DATABASE = "interview_bot.db"
+from app.config import DATABASE_PATH
+
+DATABASE = DATABASE_PATH
 
 def get_db():
     """Get database connection"""
