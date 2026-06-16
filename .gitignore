@@ -14,5 +14,12 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Data (if contains user files or large data)
+# Databases (runtime state)
+*.db
+*.sqlite3
 
+# Runtime-generated data & user PII (never commit)
+data/
+downloads/
+uploads/
+*.pdf
