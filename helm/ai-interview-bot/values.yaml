@@ -1,0 +1,112 @@
+global:
+  imageRegistry: ghcr.io/yourorg
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ---------------- Backend ----------------
+backend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ai-interview-bot-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  persistence:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    dataSize: 5Gi
+    uploadsSize: 10Gi
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8000"
+  env: {}
+
+# ---------------- Frontend ----------------
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ai-interview-bot-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 750m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 75
+
+# ---------------- Config & secrets ----------------
+config:
+  APP_ENV: production
+  LOG_LEVEL: info
+  NEXT_PUBLIC_API_URL: https://aibot.example.com
+  NODE_ENV: production
+
+# Provide via --set or external secret operator. Empty values create
+# a placeholder that you can patch later.
+secrets:
+  GEMINI_API_KEY: ""
+  OPENAI_API_KEY: ""
+
+# ---------------- Ingress ----------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  host: aibot.example.com
+  tls:
+    enabled: true
+    secretName: aibot-tls
+
+# ---------------- Pod security ----------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+# ---------------- ServiceMonitor (Prometheus Operator) ----------------
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}

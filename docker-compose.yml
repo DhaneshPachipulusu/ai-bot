@@ -1,0 +1,61 @@
+# Development docker-compose
+# Usage: docker compose up --build
+name: ai-interview-bot
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ai-interview-bot/backend:dev
+    container_name: aibot-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app:ro
+      - backend_data:/app/data
+      - backend_uploads:/app/uploads
+      - backend_downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - aibot-net
+
+  frontend:
+    build:
+      context: ./ai-frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    image: ai-interview-bot/frontend:dev
+    container_name: aibot-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - aibot-net
+
+volumes:
+  backend_data:
+  backend_uploads:
+  backend_downloads:
+
+networks:
+  aibot-net:
+    driver: bridge

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-interview-bot
+  labels:
+    app.kubernetes.io/name: ai-interview-bot
+    app.kubernetes.io/managed-by: kubectl

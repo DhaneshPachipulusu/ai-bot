@@ -1,0 +1,15 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+{{- if .Values.ingress.enabled }}
+Visit: https://{{ .Values.ingress.host }}
+{{- else }}
+Port-forward to access:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aibot.fullname" . }}-frontend 3000:{{ .Values.frontend.service.port }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aibot.fullname" . }}-backend  8000:{{ .Values.backend.service.port }}
+{{- end }}
+
+Check status:
+  kubectl -n {{ .Release.Namespace }} get pods,svc,ingress,hpa -l app.kubernetes.io/instance={{ .Release.Name }}

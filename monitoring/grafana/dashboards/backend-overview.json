@@ -1,0 +1,46 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Backend Overview",
+  "tags": ["aibot", "backend"],
+  "timezone": "browser",
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Up",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "up{job=\"backend\"}", "refId": "A"}]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate (req/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=\"backend\"}[1m])) by (handler)",
+        "legendFormat": "{{handler}}",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency (s)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=\"backend\"}[5m]))) ",
+        "refId": "A"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error rate",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{job=\"backend\",status=~\"5..\"}[1m]))",
+        "refId": "A"
+      }]
+    }
+  ]
+}
