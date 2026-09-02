@@ -98,6 +98,14 @@ def analyze_interview(conversation_path: str) -> dict:
     # ---------- Rule-based scores (for charts) ----------
     score_block = rule_interview_scores(qa_pairs)
 
+    # The competency ledger is built turn by turn DURING the interview, so it
+    # survives even when this final analysis call is rate-limited. It is also
+    # the only signal that separates a candidate who knows things from one who
+    # merely talks at length, so it overrides the length-based heuristics.
+    ledger = data.get("competencies") or {}
+    if ledger:
+        score_block = apply_competency_evidence(score_block, ledger)
+
     # ---------- AI insights (textual value) ----------
     ai_block = {}
     if AI_AVAILABLE:
@@ -136,12 +144,88 @@ def analyze_interview(conversation_path: str) -> dict:
     # Remove qa_feedback from ai_block if it exists (we're using merged version)
     ai_block_clean = {k: v for k, v in ai_block.items() if k not in ["qa_feedback", "per_question_feedback"]}
 
-    return {
+    merged = {
         **score_block,
         **ai_block_clean,
         "qa_feedback": merged_qa_feedback,
-        "analysis_mode": ai_block.get("analysis_mode", "rule_based")
+        "analysis_mode": ai_block.get("analysis_mode", "rule_based"),
     }
+    # AI text is richer when available, but the ledger's scores are the
+    # evidence-based ones and must not be overwritten by the AI block.
+    if ledger:
+        merged["scores"] = score_block["scores"]
+        merged["overall_score"] = score_block["overall_score"]
+        merged["competencies"] = ledger
+        merged["evidence_ratio"] = score_block.get("evidence_ratio")
+    return merged
+
+
+def apply_competency_evidence(score_block: dict, ledger: dict) -> dict:
+    """Re-score from demonstrated competence rather than answer length.
+
+    Without this, a fluent candidate who substantiates nothing scores the same
+    as one who substantiates everything - both write long answers full of
+    technical nouns. The ledger records whether a claim actually survived
+    probing, which is the distinction that matters.
+    """
+    statuses = [v.get("status") for v in ledger.values()]
+    confirmed = statuses.count("confirmed")
+    partial = statuses.count("partial")
+    unproven = statuses.count("unproven")
+    assessed = confirmed + partial + unproven
+    if not assessed:
+        return score_block
+
+    # 1.0 = every probed competency held up, 0.0 = none did.
+    evidence = (confirmed + 0.5 * partial) / assessed
+
+    scores = dict(score_block.get("scores") or {})
+
+    def blend(key, weight):
+        """Pull a heuristic score toward the evidence ratio."""
+        base = scores.get(key, 6)
+        target = 2.0 + 8.0 * evidence
+        scores[key] = max(1, min(10, round(base + (target - base) * weight)))
+
+    # Weighted by how much each dimension depends on demonstrated substance.
+    blend("technical", 0.85)
+    blend("problem_solving", 0.75)
+    blend("clarity", 0.45)
+    blend("communication", 0.30)
+    blend("confidence", 0.25)
+
+    overall = round(sum(scores.values()) / len(scores), 1)
+
+    out = dict(score_block)
+    out["scores"] = scores
+    out["overall_score"] = overall
+    out["evidence_ratio"] = round(evidence, 2)
+    out["competencies"] = ledger
+    out["job_readiness"] = ("Ready" if overall >= 8
+                            else "Developing" if overall >= 6
+                            else "Needs Work")
+
+    proven = [k for k, v in ledger.items() if v.get("status") == "confirmed"]
+    gaps = [(k, v.get("note", "")) for k, v in ledger.items()
+            if v.get("status") == "unproven"]
+
+    strengths = [f"{k} - {ledger[k].get('note') or 'demonstrated with specifics'}"
+                 for k in proven[:5]]
+    improvements = [
+        f"{k} - claimed but not substantiated. {note}".strip()
+        for k, note in gaps[:5]
+    ]
+    if unproven and unproven >= confirmed:
+        improvements.insert(0, (
+            f"{unproven} of {assessed} areas probed could not be backed up with "
+            "specifics. Prepare a concrete example - what you personally built, "
+            "how it worked, and what you would change - for every skill on your "
+            "resume."))
+    if strengths:
+        out["strengths"] = strengths
+    if improvements:
+        out["improvements"] = improvements
+    return out
 
 
 def calculate_answer_score(answer: str) -> int:
