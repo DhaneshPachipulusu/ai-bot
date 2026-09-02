@@ -7,6 +7,7 @@ Analyzer Service
 
 import json
 import os
+import time
 from typing import Optional
 
 # ==========================================
@@ -31,17 +32,52 @@ except Exception as e:
     print(f"⚠️ Gemini import failed: {e}")
 
 
+# Same two failure modes as the interview turn: free-tier 429s and 503
+# overload. A dropped call here is what stamps "Rule-based" on the report,
+# so it is worth a longer wait than an interactive turn - the candidate is
+# waiting on one request, not one of ten.
+MODEL_CHAIN = [m for m in (GEMINI_MODEL, "gemini-2.5-flash-lite") if m]
+_RETRY_BUDGET_SECONDS = 20.0
+_BACKOFF = (1.0, 3.0, 6.0)
+
+
+def _is_transient(err: Exception) -> bool:
+    s = str(err)
+    return any(k in s for k in
+               ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded"))
+
+
 def call_gemini(prompt: str) -> Optional[str]:
     if not client:
         return None
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        return response.text.strip()
-    except Exception:
-        return None
+
+    deadline = time.monotonic() + _RETRY_BUDGET_SECONDS
+    last_error = None
+
+    for model in MODEL_CHAIN:
+        for attempt, pause in enumerate((0.0,) + _BACKOFF):
+            if pause:
+                if time.monotonic() + pause > deadline:
+                    break
+                time.sleep(pause)
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt
+                )
+                if attempt or model != MODEL_CHAIN[0]:
+                    print(f"✅ Analysis recovered on {model} (attempt {attempt + 1})")
+                return response.text.strip()
+            except Exception as e:
+                last_error = e
+                if not _is_transient(e):
+                    print(f"⚠️ Analysis Gemini error ({model}): {str(e)[:120]}")
+                    return None
+                if time.monotonic() > deadline:
+                    break
+
+    print(f"⚠️ Analysis falling back to rule-based: {str(last_error)[:120]}")
+    return None
 
 
 # ==========================================

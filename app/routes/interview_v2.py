@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 import asyncio
 import uuid
+
+from app.prompts.interviewer_system import INTERVIEWER_SYSTEM
 import json
 import os
 import random
@@ -42,25 +44,80 @@ except Exception as e:
     print(f"⚠️ Gemini import failed: {e}")
 
 
-async def call_gemini(prompt: str) -> Optional[str]:
-    """Call Gemini via the SDK's async client.
+# Models tried in order for a single turn. The free tier rate-limits per
+# model, and individual models return 503 when Google is at capacity, so a
+# second model is a cheap way to survive both without a visible fallback.
+# Ordered by free-tier RPM headroom: 3.5-flash-lite allows 15/min against
+# 2.5-flash's 5, so it goes first and the configured model backs it up.
+MODEL_CHAIN = []
+for _m in ("gemini-3.5-flash-lite", GEMINI_MODEL, "gemini-2.5-flash-lite"):
+    if _m and _m not in MODEL_CHAIN:
+        MODEL_CHAIN.append(_m)
+
+# An interview turn is interactive: a candidate is sitting there waiting.
+# Retrying is worth a few seconds, never the 37s the API sometimes suggests.
+# A real interviewer re-asks once, maybe twice, then notes the gap and moves
+# on. Beyond that it stops being an interview.
+MAX_CONSECUTIVE_REDIRECTS = 2
+
+_RETRY_BUDGET_SECONDS = 8.0
+_BACKOFF = (0.6, 1.8)
+
+
+def _is_transient(err: Exception) -> bool:
+    """429 (rate limited) and 503 (overloaded) both clear on their own."""
+    s = str(err)
+    return any(k in s for k in
+               ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE", "overloaded"))
+
+
+async def call_gemini(prompt: str,
+                      system_instruction: Optional[str] = None) -> Optional[str]:
+    """Call Gemini via the SDK's async client, retrying transient failures.
 
     Uses client.aio so the request awaits on the event loop instead of
     occupying a threadpool worker. An interview turn blocks for seconds,
     so this is what lets concurrent candidates share one process.
+
+    Free-tier quota and model overload are the two failure modes that
+    actually happen in practice, and both are temporary. Without this the
+    caller drops to the canned question bank mid-interview, which reads to
+    the candidate as the product breaking.
     """
     if not client:
         return None
 
-    try:
-        response = await client.aio.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        return response.text.strip()
-    except Exception as e:
-        print(f"⚠️ Gemini API error: {e}")
-        return None
+    deadline = asyncio.get_event_loop().time() + _RETRY_BUDGET_SECONDS
+    last_error = None
+
+    for model in MODEL_CHAIN:
+        for attempt, pause in enumerate((0.0,) + _BACKOFF):
+            if pause:
+                if asyncio.get_event_loop().time() + pause > deadline:
+                    break
+                await asyncio.sleep(pause)
+            try:
+                cfg = ({"system_instruction": system_instruction}
+                       if system_instruction else None)
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=cfg,
+                )
+                if attempt or model != MODEL_CHAIN[0]:
+                    print(f"✅ Gemini recovered on {model} (attempt {attempt + 1})")
+                return response.text.strip()
+            except Exception as e:
+                last_error = e
+                if not _is_transient(e):
+                    print(f"⚠️ Gemini API error ({model}): {e}")
+                    return None
+                print(f"⏳ {model} transient failure, retrying: {str(e)[:80]}")
+                if asyncio.get_event_loop().time() > deadline:
+                    break
+
+    print(f"⚠️ Gemini unavailable after retries: {str(last_error)[:120]}")
+    return None
 
 
 # ==========================================
@@ -289,63 +346,117 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
         interview.get("experience_level", "fresher"),
     )
 
-    prompt = f"""You are Alex, a friendly technical interviewer conducting a real interview for a {target_role} position.
-You are interviewing {candidate_name}.
+    last_question = ""
+    for turn in reversed(conversation):
+        if turn.get("role") == "interviewer":
+            last_question = turn.get("text", "")
+            break
 
-## CANDIDATE'S RESUME (use this to ask SPECIFIC, personalized questions):
-{resume_context}
+    # How many times in a row we have already re-asked the same thing. Without
+    # this the model redirects forever: it keeps correctly detecting that the
+    # candidate dodged, and keeps re-asking, and the interview stops moving.
+    # A "diagnose" turn is still an unanswered question, so it counts toward
+    # the escalation ladder: redirect -> diagnose -> pivot.
+    redirects_used = 0
+    for turn in reversed(conversation):
+        if turn.get("role") != "interviewer":
+            continue
+        if turn.get("decision") in ("redirect", "diagnose"):
+            redirects_used += 1
+        else:
+            break
 
-## CALIBRATION:
-{calibration}
+    ledger = interview.get("competencies") or {}
+    competency_summary = ("; ".join(f"{k}: {v.get('status')}"
+                                    for k, v in ledger.items())
+                          or "none assessed yet")
 
-## CONVERSATION SO FAR:
-{conv_text}
+    # ---- Layer 2: interview state -----------------------------------
+    # Everything that varies per turn, as structured data rather than prose.
+    # The model reasons better over a labelled state block than over a wall of
+    # instructions restated each turn.
+    state_block = json.dumps({
+        "role_being_interviewed_for": target_role,
+        "candidate_name": candidate_name,
+        "stage": current_stage,
+        "turn_budget": {"asked": questions_asked, "max": max_questions},
+        "resume": resume_context,
+        "claimed_skills": skills,
+        "calibration": calibration,
+        "question_you_just_asked": last_question,
+        "candidate_latest_answer": candidate_answer,
+        "times_already_reasked_this": redirects_used,
+        "competencies_so_far": competency_summary,
+        "recent_conversation": conv_text,
+    }, indent=2, ensure_ascii=False)
 
-## CANDIDATE'S LATEST ANSWER:
-"{candidate_answer}"
+    # ---- Layer 3: this turn's task + output contract -----------------
+    # Precedence matters. A fresh technical contradiction is the single most
+    # informative thing that can happen in an interview, so it outranks the
+    # redirect ladder - otherwise the escalation rule below swallows it and the
+    # candidate walks away with an unexamined claim.
+    ladder = {
+        0: ('This question has not been re-asked yet. If the answer missed it, '
+            'decision="redirect": name the gap and re-ask ONCE, simplified.'),
+        1: ('You have already re-asked once. DO NOT re-ask again. '
+            'decision="diagnose": work out WHY they keep missing it and ask '
+            'about that instead - usually they are conflating two things.'),
+    }.get(redirects_used,
+          'You have re-asked twice. STOP pursuing this. decision="move_on": '
+          'record the competency as "unproven" and pivot to a different one.')
 
-## CURRENT STATE:
-- Stage: {current_stage}
-- Questions asked: {questions_asked} / {max_questions}
-- Candidate skills: {', '.join(skills) if skills else 'Not specified'}
+    escalation = f"""Apply these IN ORDER and stop at the first that fits.
 
-## YOUR TASK:
-Analyze the candidate's answer and decide what to do next.
+PRIORITY 1 - UNEXAMINED TECHNICAL CLAIM OR CONTRADICTION.
+Check the latest answer against everything claimed earlier. If it contradicts an
+earlier claim, or states something technically questionable, decision="challenge"
+and probe it NOW. This outranks everything below - an unexamined claim is a
+failed interview. Classic cases: "real-time" that turns out to be REST polling,
+an "optimisation" with no stated change, a resume skill they cannot apply.
 
-## DECISION RULES:
-1. **If answer was SHORT/VAGUE (< 30 words)** → Ask for specific example or clarification
-2. **If they mentioned something INTERESTING** → Dig deeper into that topic
-3. **If answer was COMPLETE and GOOD** → Acknowledge positively and move to next topic
-4. **If they said "I don't know"** → Be encouraging, ask how they'd learn it
-5. **If STRUGGLING** → Simplify or move on gracefully
+PRIORITY 2 - A CLAIMED SKILL WITH NO HANDS-ON EVIDENCE.
+If they admit a skill is theory-only, do NOT just drop it. Give a small concrete
+hypothetical and evaluate the reasoning, then move on:
+"Fine that you haven't run it. Given this Spring Boot app and a MySQL database,
+ what would you put in a container, and why?"
+Finding the boundary of what they know IS the assessment.
 
-## STAGE PROGRESSION (current: {current_stage}):
-greeting → self_intro → background → skills_interest → technical → project → behavioral → closing
+PRIORITY 3 - ANSWER DID NOT MATCH THE QUESTION.
+{ladder}
 
-Only advance stage when current topic is adequately covered.
+PRIORITY 4 - ANSWER WAS FINE.
+Probe one level deeper on it, or move to a competency still "not_assessed"."""
 
-## RESUME-GROUNDING RULES (IMPORTANT):
-- In the 'project' stage, ask about a SPECIFIC project from their resume BY NAME (use the actual project title and tech listed) - never a generic "tell me about a project".
-- In the 'technical' stage, anchor questions to the skills/tech they actually listed or used in those projects.
-- In 'background'/'experience', reference their actual company/internship/role when one exists.
-- Never invent projects, companies, or tech the resume does not mention. If the resume lacks detail for a stage, ask a general role-appropriate question instead.
+    prompt = f"""## INTERVIEW STATE
+{state_block}
 
-## RULES:
-- Ask ONLY ONE question
-- Be conversational and natural
-- Use their name occasionally
-- Keep it professional but warm
-- ONE concept per question (no mixed behavioral+technical)
+## THIS TURN
+{escalation}
 
-Return ONLY valid JSON:
+Decide the single next thing to say. Ground any project or skill question in
+the resume above - name the actual project. Never invent projects, companies or
+technologies the resume does not mention.
+
+Also record what you now know about the competency you were probing. That
+ledger is the real output of the interview: "Internship Experience: unproven -
+repeatedly redirected to a college project, never named the company" is worth
+far more than "candidate did not answer".
+
+Return ONLY valid JSON, no markdown fence:
 {{
-  "decision": "follow_up | dig_deeper | move_on | encourage | close",
-  "acknowledgment": "Brief 1-2 sentence acknowledgment of their answer",
-  "question": "Your next question",
-  "next_stage": "{current_stage} or next stage name"
+  "answered_question": true or false,
+  "answer_class": "direct | partial | related_but_off | unrelated | unclear | dont_know | contradiction",
+  "claim_check": "none, or a one-line description of the inconsistency found",
+  "answer_quality": "strong | adequate | weak | evasive | off_topic",
+  "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
+  "competency": {{"name": "e.g. Spring Boot Fundamentals", "status": "confirmed | partial | unproven | not_assessed", "note": "one line of evidence"}},
+  "decision": "follow_up | dig_deeper | challenge | redirect | diagnose | move_on | encourage | close",
+  "acknowledgment": "Neutral bridge. No praise unless specifically earned.",
+  "question": "Your single next question",
+  "next_stage": "{current_stage} or the next stage name"
 }}"""
 
-    response_text = await call_gemini(prompt)
+    response_text = await call_gemini(prompt, system_instruction=INTERVIEWER_SYSTEM)
 
     if response_text:
         try:
@@ -668,7 +779,7 @@ async def respond(request: RespondRequest):
         interview["end_time"] = datetime.now().isoformat()
         
         name = interview.get("candidate_name", "there").split()[0]
-        closing_msg = f"Thank you so much for your time, {name}! It was great talking with you. You'll receive your detailed feedback report shortly. Best of luck!"
+        closing_msg = build_closing_message(interview, name)
         
         interview["conversation_history"].append({
             "role": "interviewer",
@@ -689,10 +800,29 @@ async def respond(request: RespondRequest):
     
     decision = ai_response.get("decision", "move_on")
     acknowledgment = ai_response.get("acknowledgment", "")
+    answered_question = ai_response.get("answered_question", True)
+    claim_check = ai_response.get("claim_check", "none")
+    answer_quality = ai_response.get("answer_quality", "")
+
+    comp = ai_response.get("competency") or {}
+    if isinstance(comp, dict) and comp.get("name"):
+        ledger = interview.setdefault("competencies", {})
+        prior = ledger.get(comp["name"], {})
+        # Never downgrade something already demonstrated.
+        if prior.get("status") != "confirmed":
+            ledger[comp["name"]] = {
+                "status": comp.get("status", "not_assessed"),
+                "note": comp.get("note", ""),
+                "turn": interview.get("questions_asked", 0),
+            }
+        print(f"🎯 {comp['name']}: {comp.get('status')} - {comp.get('note','')[:80]}")
     question = ai_response.get("question", "Tell me more about your experience.")
     next_stage = ai_response.get("next_stage", interview.get("current_stage", "technical"))
     
-    print(f"🤖 AI Decision: {decision}, Next stage: {next_stage}")
+    print(f"🤖 AI Decision: {decision}, Next stage: {next_stage}, "
+          f"quality: {answer_quality or 'n/a'}, answered: {answered_question}")
+    if claim_check and claim_check.lower() != "none":
+        print(f"🔍 Claim check: {claim_check}")
     
     # Build response text
     if acknowledgment:
@@ -720,7 +850,25 @@ async def respond(request: RespondRequest):
             "is_complete": True
         }
     
-    # Update interview state
+    # Update interview state. A redirect re-asks the question that was dodged,
+    # so the topic is not finished and the stage must not advance. But cap it:
+    # the model will happily re-ask the same question forever, which reads as
+    # interrogation and stalls the interview.
+    if decision in ("redirect", "diagnose"):
+        prior_redirects = 0
+        for turn in reversed(interview["conversation_history"][:-1]):
+            if turn.get("role") != "interviewer":
+                continue
+            if turn.get("decision") in ("redirect", "diagnose"):
+                prior_redirects += 1
+            else:
+                break
+        if prior_redirects >= MAX_CONSECUTIVE_REDIRECTS:
+            print(f"↪️ redirect cap hit ({prior_redirects}), forcing move_on")
+            decision = "move_on"
+            answer_quality = answer_quality or "evasive"
+        else:
+            next_stage = interview.get("current_stage", next_stage)
     interview["current_stage"] = next_stage
     interview["questions_asked"] += 1
     
@@ -730,13 +878,19 @@ async def respond(request: RespondRequest):
         "text": response_text,
         "timestamp": datetime.now().isoformat(),
         "stage": next_stage,
-        "decision": decision
+        "decision": decision,
+        "answered_question": answered_question,
+        "claim_check": claim_check,
+        "answer_quality": answer_quality
     })
     
     await asyncio.to_thread(save_interview, interview)
 
     # Determine message type
-    msg_type = "followup" if decision in ["follow_up", "dig_deeper"] else "question"
+    msg_type = ("followup"
+                if decision in ["follow_up", "dig_deeper", "challenge",
+                                "redirect", "diagnose"]
+                else "question")
     
     return {
         "message": {"text": response_text, "type": msg_type},
@@ -808,6 +962,29 @@ def save_interview(interview: dict):
     for path in [f"data/interviews/{iid}.json", f"data/conversations/{iid}.json"]:
         with open(path, 'w') as f:
             json.dump(interview, f, indent=2)
+
+
+def build_closing_message(interview: dict, name: str) -> str:
+    """Close the interview by saying why, not just "thank you".
+
+    Ending on a turn budget while a competency is still unproven is a real
+    outcome and the candidate should hear it, rather than an abrupt sign-off
+    straight after an answer that missed the question.
+    """
+    ledger = interview.get("competencies") or {}
+    unproven = [k for k, v in ledger.items() if v.get("status") == "unproven"]
+    confirmed = [k for k, v in ledger.items() if v.get("status") == "confirmed"]
+
+    parts = [f"That's the time we have, {name} - thanks for talking it through."]
+    if confirmed:
+        parts.append("We covered " + ", ".join(confirmed[:3]) + " in good detail.")
+    if unproven:
+        parts.append(
+            "We didn't manage to pin down " + ", ".join(unproven[:2]) +
+            " - worth having concrete examples ready for that next time."
+        )
+    parts.append("Your detailed report will follow shortly. Best of luck!")
+    return " ".join(parts)
 
 
 def get_state(interview: dict) -> dict:
