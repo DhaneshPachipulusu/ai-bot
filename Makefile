@@ -57,7 +57,7 @@ prod-logs: ## Tail prod logs
 	$(COMPOSE_PROD) logs -f --tail=100
 
 # ---------- Image build & push ----------
-REGISTRY ?= ghcr.io/yourorg
+REGISTRY ?= ghcr.io/dhaneshpachipulusu
 TAG      ?= $(shell git rev-parse --short HEAD)
 
 .PHONY: build

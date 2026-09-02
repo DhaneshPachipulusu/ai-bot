@@ -29,7 +29,7 @@ spec:
         fsGroup: 1001
       containers:
         - name: backend
-          image: ghcr.io/yourorg/ai-interview-bot-backend:latest
+          image: ghcr.io/dhaneshpachipulusu/ai-interview-bot-backend:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -15,7 +15,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    image: ${REGISTRY:-ghcr.io/yourorg}/ai-interview-bot-backend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/dhaneshpachipulusu}/ai-interview-bot-backend:${TAG:-latest}
     container_name: aibot-backend
     restart: always
     env_file:
@@ -54,7 +54,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.example.com}
-    image: ${REGISTRY:-ghcr.io/yourorg}/ai-interview-bot-frontend:${TAG:-latest}
+    image: ${REGISTRY:-ghcr.io/dhaneshpachipulusu}/ai-interview-bot-frontend:${TAG:-latest}
     container_name: aibot-frontend
     restart: always
     environment:

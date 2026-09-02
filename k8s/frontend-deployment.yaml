@@ -28,7 +28,7 @@ spec:
         runAsGroup: 1001
       containers:
         - name: frontend
-          image: ghcr.io/yourorg/ai-interview-bot-frontend:latest
+          image: ghcr.io/dhaneshpachipulusu/ai-interview-bot-frontend:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
