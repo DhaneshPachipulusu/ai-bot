@@ -126,8 +126,14 @@ def get_time_greeting(candidate_name: str) -> str:
     else:
         time_greeting = "Good evening"
     
-    # Clean up name
-    name = candidate_name.split()[0] if candidate_name and candidate_name != "Candidate" else "there"
+    # Clean up name. Resumes often carry the full name in caps
+    # ("PACHIPULUSU DHANESWARA RAO"), which shouts when dropped into a
+    # greeting, so normalise the case before using the leading token.
+    if candidate_name and candidate_name != "Candidate":
+        first = candidate_name.split()[0]
+        name = first.title() if first.isupper() or first.islower() else first
+    else:
+        name = "there"
     
     greetings = [
         f"{time_greeting}, {name}! I'm your interviewer today. This will be a relaxed, conversational session. How are you doing today?",

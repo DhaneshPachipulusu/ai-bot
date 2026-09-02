@@ -131,6 +131,12 @@ def calculate_answer_score(answer: str) -> int:
     return score
 
 
+# Conversational turns that are not interview questions and must not be
+# scored. "How are you doing today?" is small talk; grading the reply to it
+# drags every average down and pollutes the per-question feedback list.
+NON_SCORING_STAGES = {"greeting"}
+
+
 def extract_qa(data: dict) -> list:
     pairs = []
     current_q = None
@@ -138,9 +144,10 @@ def extract_qa(data: dict) -> list:
     for msg in data.get("conversation_history", []):
         role = msg.get("role")
         text = msg.get("text") or msg.get("content") or ""
+        stage = (msg.get("stage") or "").lower()
 
         if role == "interviewer":
-            current_q = text
+            current_q = None if stage in NON_SCORING_STAGES else text
         elif role == "candidate" and current_q:
             pairs.append({"question": current_q, "answer": text})
             current_q = None
@@ -178,6 +185,10 @@ def rule_interview_scores(qa_pairs: list) -> dict:
         1
     )
 
+    strengths, improvements = _derive_feedback(
+        qa_pairs, avg_words, tech_hits, overall
+    )
+
     return {
         "scores": {
             "communication": communication,
@@ -187,8 +198,87 @@ def rule_interview_scores(qa_pairs: list) -> dict:
             "technical": technical,
             "problem_solving": problem_solving
         },
-        "overall_score": overall
+        "overall_score": overall,
+        "strengths": strengths,
+        "improvements": improvements,
+        "job_readiness": (
+            "Ready" if overall >= 8
+            else "Developing" if overall >= 6
+            else "Needs Work"
+        ),
     }
+
+
+def _derive_feedback(qa_pairs, avg_words, tech_hits, overall):
+    """Build honest strengths/improvements from measured signals.
+
+    The AI path supplies far better text, but when it is unavailable the
+    report must still say something true and specific rather than render an
+    empty Strengths box next to a "no critical areas" message.
+    """
+    n = len(qa_pairs)
+    shortest = min((len(q["answer"].split()) for q in qa_pairs), default=0)
+    thin = [i + 1 for i, q in enumerate(qa_pairs)
+            if len(q["answer"].split()) < 25]
+
+    strengths, improvements = [], []
+
+    if avg_words > 80:
+        strengths.append(
+            f"Answers are substantial - averaging {avg_words:.0f} words, "
+            "enough to show real depth."
+        )
+    elif avg_words > 45:
+        strengths.append(
+            f"Answers are a reasonable length (about {avg_words:.0f} words "
+            "on average) and stay on topic."
+        )
+    if tech_hits >= n:
+        strengths.append(
+            f"Strong technical vocabulary - {tech_hits} concrete tool or "
+            "technology references across the interview."
+        )
+    elif tech_hits > 2:
+        strengths.append(
+            f"Uses specific technical terms ({tech_hits} references) rather "
+            "than staying vague."
+        )
+    if n >= 5:
+        strengths.append(
+            f"Completed all {n} questions without dropping out."
+        )
+    if not strengths:
+        strengths.append("Completed the interview end to end.")
+
+    if avg_words < 45:
+        improvements.append(
+            f"Answers are short - averaging {avg_words:.0f} words. Aim for "
+            "60-90: state the situation, what you did, and the result."
+        )
+    if thin:
+        improvements.append(
+            "Under-developed answers on question"
+            + ("s " if len(thin) > 1 else " ")
+            + ", ".join(f"Q{i}" for i in thin[:4])
+            + " - each needs a concrete example."
+        )
+    if tech_hits <= 2:
+        improvements.append(
+            "Few specific technologies named. Interviewers look for concrete "
+            "tools and versions, not general descriptions."
+        )
+    if shortest < 12:
+        improvements.append(
+            "At least one answer was barely a sentence. Never leave a "
+            "question with a one-line reply."
+        )
+    if not improvements:
+        improvements.append(
+            "No structural weaknesses detected by the rule-based pass. Re-run "
+            "with AI analysis enabled for detailed per-answer critique."
+        )
+
+    return strengths, improvements
 
 
 # ==========================================
