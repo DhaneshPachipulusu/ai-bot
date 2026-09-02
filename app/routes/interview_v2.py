@@ -7,6 +7,7 @@ Uses Gemini AI (google-genai SDK) for dynamic questions and follow-ups.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
+import asyncio
 import uuid
 import json
 import os
@@ -41,13 +42,18 @@ except Exception as e:
     print(f"⚠️ Gemini import failed: {e}")
 
 
-def call_gemini(prompt: str) -> Optional[str]:
-    """Call Gemini API using google-genai SDK."""
+async def call_gemini(prompt: str) -> Optional[str]:
+    """Call Gemini via the SDK's async client.
+
+    Uses client.aio so the request awaits on the event loop instead of
+    occupying a threadpool worker. An interview turn blocks for seconds,
+    so this is what lets concurrent candidates share one process.
+    """
     if not client:
         return None
-    
+
     try:
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt
         )
@@ -248,7 +254,7 @@ def get_calibration_guidance(difficulty: str, experience_level: str) -> str:
     return f"{level_note}\n{diff_note}"
 
 
-def generate_dynamic_response(interview: dict, candidate_answer: str) -> dict:
+async def generate_dynamic_response(interview: dict, candidate_answer: str) -> dict:
     """
     Generate the next question dynamically based on conversation context.
     Returns: {"acknowledgment": "...", "question": "...", "decision": "...", "next_stage": "..."}
@@ -333,8 +339,8 @@ Return ONLY valid JSON:
   "next_stage": "{current_stage} or next stage name"
 }}"""
 
-    response_text = call_gemini(prompt)
-    
+    response_text = await call_gemini(prompt)
+
     if response_text:
         try:
             # Parse JSON response
@@ -435,7 +441,7 @@ def generate_fallback_response(interview: dict, candidate_answer: str) -> dict:
         }
 
 
-def generate_ai_acknowledgment(answer: str) -> str:
+async def generate_ai_acknowledgment(answer: str) -> str:
     """Generate acknowledgment using AI."""
     
     defaults = ["Thank you.", "Got it.", "I see.", "Interesting.", "Good."]
@@ -448,8 +454,8 @@ def generate_ai_acknowledgment(answer: str) -> str:
 Generate a brief acknowledgment (5-12 words) before the next question.
 Be encouraging but professional. Return ONLY the acknowledgment."""
 
-    response_text = call_gemini(prompt)
-    
+    response_text = await call_gemini(prompt)
+
     if response_text:
         ack = response_text.strip().strip('"').strip("'")
         if 3 < len(ack) < 80:
@@ -628,7 +634,7 @@ def start_interview(request: StartInterviewRequest):
 
 
 @router.post("/interview/respond")
-def respond(request: RespondRequest):
+async def respond(request: RespondRequest):
     """Submit answer, get dynamically generated next question."""
     
     interview = get_interview(request.interview_id)
@@ -665,7 +671,7 @@ def respond(request: RespondRequest):
             "stage": "closing"
         })
         
-        save_interview(interview)
+        await asyncio.to_thread(save_interview, interview)
         return {
             "message": {"text": closing_msg, "type": "conclusion"},
             "state": get_state(interview),
@@ -673,7 +679,7 @@ def respond(request: RespondRequest):
         }
     
     # Generate dynamic response based on conversation context
-    ai_response = generate_dynamic_response(interview, request.answer)
+    ai_response = await generate_dynamic_response(interview, request.answer)
     
     decision = ai_response.get("decision", "move_on")
     acknowledgment = ai_response.get("acknowledgment", "")
@@ -701,7 +707,7 @@ def respond(request: RespondRequest):
             "stage": "closing"
         })
         
-        save_interview(interview)
+        await asyncio.to_thread(save_interview, interview)
         return {
             "message": {"text": response_text, "type": "conclusion"},
             "state": get_state(interview),
@@ -721,8 +727,8 @@ def respond(request: RespondRequest):
         "decision": decision
     })
     
-    save_interview(interview)
-    
+    await asyncio.to_thread(save_interview, interview)
+
     # Determine message type
     msg_type = "followup" if decision in ["follow_up", "dig_deeper"] else "question"
     

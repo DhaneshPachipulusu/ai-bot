@@ -2,6 +2,8 @@
 AI Interview Bot - Main Application
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -23,7 +25,24 @@ from app.routes import analysis
 from app.routes.interview_v2 import router as interview_v2_router
 
 
-app = FastAPI(title="AI Interview Bot")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown hook. Replaces the deprecated @app.on_event."""
+    print("🚀 Starting AI Interview Bot API...")
+
+    if not os.path.exists(config.DATABASE_PATH):
+        print("🔧 Database not found. Creating...")
+        db.setup_database()
+    else:
+        print("✅ Database found!")
+        # Run migrations for existing DB
+        db.migrate_add_role_column()
+        db.create_admin_user()
+
+    yield
+
+
+app = FastAPI(title="AI Interview Bot", lifespan=lifespan)
 
 if _METRICS_ENABLED:
     Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
@@ -36,24 +55,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# ==================
-# Startup
-# ==================
-
-@app.on_event("startup")
-def startup_event():
-    print("🚀 Starting AI Interview Bot API...")
-    
-    if not os.path.exists(config.DATABASE_PATH):
-        print("🔧 Database not found. Creating...")
-        db.setup_database()
-    else:
-        print("✅ Database found!")
-        # Run migrations for existing DB
-        db.migrate_add_role_column()
-        db.create_admin_user()
 
 
 # ==================
