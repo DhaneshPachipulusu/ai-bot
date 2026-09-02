@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 import asyncio
+import re
 import uuid
 
 from app.prompts.interviewer_system import INTERVIEWER_SYSTEM
@@ -56,9 +57,38 @@ for _m in ("gemini-3.5-flash-lite", GEMINI_MODEL, "gemini-2.5-flash-lite"):
 
 # An interview turn is interactive: a candidate is sitting there waiting.
 # Retrying is worth a few seconds, never the 37s the API sometimes suggests.
-# A real interviewer re-asks once, maybe twice, then notes the gap and moves
-# on. Beyond that it stops being an interview.
-MAX_CONSECUTIVE_REDIRECTS = 2
+# Escalation ladder: clarify -> concrete prompt -> diagnose -> pivot. Three
+# attempts at one competency, never a fourth.
+MAX_CONSECUTIVE_REDIRECTS = 3
+
+
+def _tokens(text):
+    return {w for w in re.findall(r"[a-z]{4,}", (text or "").lower())}
+
+
+def detect_repetition(conversation, latest_answer):
+    """How many earlier answers were substantially the same as this one.
+
+    A candidate repeating a prepared project summary across unrelated questions
+    is a behavioural signal. Without measuring it the model just asks an ever
+    more specific version of the same question, which is what burned eight
+    turns on Docker in testing.
+    """
+    now = _tokens(latest_answer)
+    if len(now) < 4:
+        return 0, 0.0
+    best, hits = 0.0, 0
+    for turn in conversation:
+        if turn.get("role") != "candidate":
+            continue
+        prior = _tokens(turn.get("text", ""))
+        if len(prior) < 4:
+            continue
+        overlap = len(now & prior) / float(len(now | prior))
+        if overlap >= 0.6:
+            hits += 1
+        best = max(best, overlap)
+    return hits, round(best, 2)
 
 _RETRY_BUDGET_SECONDS = 8.0
 _BACKOFF = (0.6, 1.8)
@@ -371,6 +401,25 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
                                     for k, v in ledger.items())
                           or "none assessed yet")
 
+    # Consecutive turns spent probing the SAME competency. This is what the
+    # pivot rule needs: redirects_used only counts unanswered questions, but a
+    # strong candidate can also get stuck being asked the same follow-up.
+    current_competency, competency_attempts = None, 0
+    for turn in reversed(conversation):
+        if turn.get("role") != "interviewer":
+            continue
+        name = (turn.get("competency_name") or "").strip()
+        if not name:
+            break
+        if current_competency is None:
+            current_competency = name
+        if name == current_competency:
+            competency_attempts += 1
+        else:
+            break
+
+    repeat_hits, repeat_sim = detect_repetition(conversation, candidate_answer)
+
     # ---- Layer 2: interview state -----------------------------------
     # Everything that varies per turn, as structured data rather than prose.
     # The model reasons better over a labelled state block than over a wall of
@@ -386,6 +435,10 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
         "question_you_just_asked": last_question,
         "candidate_latest_answer": candidate_answer,
         "times_already_reasked_this": redirects_used,
+        "consecutive_turns_on_this_competency": competency_attempts,
+        "competency_being_probed": current_competency,
+        "this_answer_repeats_earlier_answers": repeat_hits,
+        "max_similarity_to_an_earlier_answer": repeat_sim,
         "competencies_so_far": competency_summary,
         "recent_conversation": conv_text,
     }, indent=2, ensure_ascii=False)
@@ -425,7 +478,21 @@ PRIORITY 3 - ANSWER DID NOT MATCH THE QUESTION.
 {ladder}
 
 PRIORITY 4 - ANSWER WAS FINE.
-Probe one level deeper on it, or move to a competency still "not_assessed"."""
+Probe one level deeper on it (depth ladder), or move to a competency still
+"not_assessed".
+
+COVERAGE GUARD - applies regardless of the above.
+You have spent {competency_attempts} consecutive turns on
+"{current_competency}". At 3 or more, STOP: mark it with the best status the
+evidence supports and move to a DIFFERENT competency, even if the candidate is
+strong and you merely want more detail. Coverage beats depth on one point.
+
+REPETITION GUARD.
+This answer substantially repeats {repeat_hits} earlier answer(s)
+(similarity {repeat_sim}). If that count is 2 or more, do not ask a more
+specific version of the same question - name the pattern once, neutrally, and
+pivot to another area. Never suggest the candidate is automated, scripted, or
+not listening."""
 
     prompt = f"""## INTERVIEW STATE
 {state_block}
@@ -798,6 +865,25 @@ async def respond(request: RespondRequest):
     # Generate dynamic response based on conversation context
     ai_response = await generate_dynamic_response(interview, request.answer)
     
+    # Recomputed here rather than passed out of generate_dynamic_response,
+    # which has several return paths (parsed AI result, fallback response).
+    repeat_hits, _repeat_sim = detect_repetition(
+        interview["conversation_history"][:-1], request.answer)
+
+    current_competency, competency_attempts_now = None, 0
+    for turn in reversed(interview["conversation_history"]):
+        if turn.get("role") != "interviewer":
+            continue
+        name = (turn.get("competency_name") or "").strip()
+        if not name:
+            break
+        if current_competency is None:
+            current_competency = name
+        if name == current_competency:
+            competency_attempts_now += 1
+        else:
+            break
+
     decision = ai_response.get("decision", "move_on")
     acknowledgment = ai_response.get("acknowledgment", "")
     answered_question = ai_response.get("answered_question", True)
@@ -805,6 +891,32 @@ async def respond(request: RespondRequest):
     answer_quality = ai_response.get("answer_quality", "")
 
     comp = ai_response.get("competency") or {}
+
+    # Pivoting away from a topic without recording it loses the finding. The
+    # model reliably moves on but does not reliably write down what it just
+    # failed to establish, which makes a candidate who dodged eight areas look
+    # better than one who dodged three.
+    # The model names a competency only sometimes. Fall back to the stage it
+    # was working in, otherwise a pivot leaves no trace and the interview looks
+    # like it established nothing because nothing was written down.
+    if not current_competency:
+        prev_stage = interview.get("current_stage")
+        if prev_stage and prev_stage not in ("greeting", "completed", "closing"):
+            current_competency = prev_stage.replace("_", " ").title()
+
+    if decision == "move_on" and current_competency:
+        already = (interview.get("competencies") or {}).get(current_competency)
+        naming_other = (isinstance(comp, dict)
+                        and comp.get("name")
+                        and comp["name"] != current_competency)
+        if naming_other and (not already or already.get("status") == "not_assessed"):
+            interview.setdefault("competencies", {})[current_competency] = {
+                "status": "unproven",
+                "note": "moved on after %d attempts without establishing evidence"
+                        % max(competency_attempts_now, 1),
+                "turn": interview.get("questions_asked", 0),
+            }
+            print(f"📌 auto-recorded {current_competency}: unproven (pivot)")
     if isinstance(comp, dict) and comp.get("name"):
         ledger = interview.setdefault("competencies", {})
         prior = ledger.get(comp["name"], {})
@@ -816,6 +928,15 @@ async def respond(request: RespondRequest):
                 "turn": interview.get("questions_asked", 0),
             }
         print(f"🎯 {comp['name']}: {comp.get('status')} - {comp.get('note','')[:80]}")
+    elif current_competency and answer_quality in ("evasive", "off_topic"):
+        led = interview.setdefault("competencies", {})
+        if current_competency not in led:
+            led[current_competency] = {
+                "status": "unproven",
+                "note": "answer was %s; no specifics offered" % answer_quality,
+                "turn": interview.get("questions_asked", 0),
+            }
+            print(f"📌 recorded {current_competency}: unproven ({answer_quality})")
     question = ai_response.get("question", "Tell me more about your experience.")
     next_stage = ai_response.get("next_stage", interview.get("current_stage", "technical"))
     
@@ -881,7 +1002,9 @@ async def respond(request: RespondRequest):
         "decision": decision,
         "answered_question": answered_question,
         "claim_check": claim_check,
-        "answer_quality": answer_quality
+        "answer_quality": answer_quality,
+        "competency_name": (comp.get("name") if isinstance(comp, dict) else None),
+        "repeats_earlier": repeat_hits
     })
     
     await asyncio.to_thread(save_interview, interview)

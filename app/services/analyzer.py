@@ -104,7 +104,10 @@ def analyze_interview(conversation_path: str) -> dict:
     # merely talks at length, so it overrides the length-based heuristics.
     ledger = data.get("competencies") or {}
     if ledger:
-        score_block = apply_competency_evidence(score_block, ledger)
+        score_block = apply_competency_evidence(
+            score_block, ledger,
+            [m for m in data.get('conversation_history', [])
+             if m.get('role') == 'interviewer'])
 
     # ---------- AI insights (textual value) ----------
     ai_block = {}
@@ -160,7 +163,8 @@ def analyze_interview(conversation_path: str) -> dict:
     return merged
 
 
-def apply_competency_evidence(score_block: dict, ledger: dict) -> dict:
+def apply_competency_evidence(score_block: dict, ledger: dict,
+                              interviewer_turns_hint=None) -> dict:
     """Re-score from demonstrated competence rather than answer length.
 
     Without this, a fluent candidate who substantiates nothing scores the same
@@ -168,12 +172,44 @@ def apply_competency_evidence(score_block: dict, ledger: dict) -> dict:
     technical nouns. The ledger records whether a claim actually survived
     probing, which is the distinction that matters.
     """
-    statuses = [v.get("status") for v in ledger.values()]
+    # A polite hello is not a competency. Counting "Communication: confirmed"
+    # from the greeting turn hands every candidate a free confirmed entry, and
+    # on a short ledger that single entry can swing the whole score.
+    TRIVIAL = ("communication", "greeting", "comfort", "rapport", "background")
+
+    def is_trivial(name):
+        n = name.lower()
+        return any(w in n for w in TRIVIAL) and "technical" not in n
+
+    scored = {k: v for k, v in ledger.items() if not is_trivial(k)}
+
+    statuses = [v.get("status") for v in scored.values()]
     confirmed = statuses.count("confirmed")
     partial = statuses.count("partial")
     unproven = statuses.count("unproven")
     assessed = confirmed + partial + unproven
     if not assessed:
+        # Every recorded competency was a greeting or rapport note, so an
+        # entire interview produced no technical evidence at all. That is a
+        # strong negative signal, not a reason to leave the heuristic score
+        # alone - falling through here is what let a candidate who answered
+        # nothing score highest.
+        if len(ledger) and len(interviewer_turns_hint or []) >= 6:
+            out = dict(score_block)
+            s = {k: min(v, 4) for k, v in (score_block.get("scores") or {}).items()}
+            out["scores"] = s
+            out["overall_score"] = round(sum(s.values()) / max(len(s), 1), 1)
+            out["evidence_ratio"] = 0.0
+            out["job_readiness"] = "Needs Work"
+            out["competencies"] = ledger
+            out["improvements"] = [
+                "No technical competency could be established across the whole "
+                "interview. Every question was answered with a general project "
+                "summary rather than specifics. Prepare, for each resume skill: "
+                "what you personally built, how it worked, and what you would "
+                "change."]
+            out["strengths"] = ["Completed the interview and engaged politely."]
+            return out
         return score_block
 
     # 1.0 = every probed competency held up, 0.0 = none did.
@@ -205,8 +241,8 @@ def apply_competency_evidence(score_block: dict, ledger: dict) -> dict:
                             else "Developing" if overall >= 6
                             else "Needs Work")
 
-    proven = [k for k, v in ledger.items() if v.get("status") == "confirmed"]
-    gaps = [(k, v.get("note", "")) for k, v in ledger.items()
+    proven = [k for k, v in scored.items() if v.get("status") == "confirmed"]
+    gaps = [(k, v.get("note", "")) for k, v in scored.items()
             if v.get("status") == "unproven"]
 
     strengths = [f"{k} - {ledger[k].get('note') or 'demonstrated with specifics'}"
