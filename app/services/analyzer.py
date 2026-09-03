@@ -187,7 +187,11 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     confirmed = statuses.count("confirmed")
     partial = statuses.count("partial")
     unproven = statuses.count("unproven")
-    assessed = confirmed + partial + unproven
+    # Honestly disclosed gaps are a real finding but not a failed claim. They
+    # count toward how much was assessed without dragging the ratio down the
+    # way an unsupported claim does.
+    no_exp = statuses.count("no_experience")
+    assessed = confirmed + partial + unproven + no_exp
     if not assessed:
         # Every recorded competency was a greeting or rapport note, so an
         # entire interview produced no technical evidence at all. That is a
@@ -213,7 +217,7 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
         return score_block
 
     # 1.0 = every probed competency held up, 0.0 = none did.
-    evidence = (confirmed + 0.5 * partial) / assessed
+    evidence = (confirmed + 0.5 * partial + 0.25 * no_exp) / assessed
 
     # One confirmed competency is not the same evidence as six. Without this,
     # an interview that only ever established Docker scored a perfect 10 on
@@ -253,7 +257,7 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
 
     proven = [k for k, v in scored.items() if v.get("status") == "confirmed"]
     gaps = [(k, v.get("note", "")) for k, v in scored.items()
-            if v.get("status") == "unproven"]
+            if v.get("status") in ("unproven", "no_experience")]
 
     strengths = [f"{k} - {ledger[k].get('note') or 'demonstrated with specifics'}"
                  for k in proven[:5]]
@@ -300,8 +304,11 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
             "specifics. Prepare a concrete example - what you personally built, "
             "how it worked, and what you would change - for every skill on your "
             "resume."))
-    if strengths:
-        out["strengths"] = strengths
+    # Once a ledger exists it is the only honest source of strengths. The
+    # length/keyword heuristic otherwise credits a candidate who established
+    # nothing with "uses specific technical terms".
+    out["strengths"] = strengths or [
+        "Completed the interview and stayed engaged throughout."]
     if improvements:
         out["improvements"] = improvements
     return out

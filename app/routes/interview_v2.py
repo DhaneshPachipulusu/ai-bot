@@ -564,6 +564,11 @@ Decide the single next thing to say. Ground any project or skill question in
 the resume above - name the actual project. Never invent projects, companies or
 technologies the resume does not mention.
 
+Status rules: "confirmed" needs a specific thing they personally did - a
+textbook definition is "partial" at best. Use "no_experience" when they simply
+have not used it and said so; use "unproven" only when they claimed it and
+could not back it up. Those two are different findings.
+
 Name the competency for the SKILL the answer actually evidenced, not for the
 section of the interview you are in. Good names: "PostgreSQL Indexing",
 "Docker Image Packaging", "Idempotency Design", "Java Concurrency",
@@ -585,7 +590,7 @@ Return ONLY valid JSON, no markdown fence:
   "claim_check": "none, or a one-line description of the inconsistency found",
   "answer_quality": "strong | adequate | weak | evasive | off_topic",
   "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
-  "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | not_assessed", "note": "one line of evidence"}},
+  "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | no_experience | not_assessed", "note": "one line of evidence"}},
   "decision": "follow_up | dig_deeper | challenge | redirect | diagnose | move_on | encourage | close",
   "acknowledgment": "Neutral bridge. No praise unless specifically earned.",
   "question": "Your single next question",
@@ -1172,18 +1177,41 @@ def build_closing_message(interview: dict, name: str) -> str:
     straight after an answer that missed the question.
     """
     ledger = interview.get("competencies") or {}
-    unproven = [k for k, v in ledger.items() if v.get("status") == "unproven"]
-    confirmed = [k for k, v in ledger.items() if v.get("status") == "confirmed"]
 
-    parts = [f"That's the time we have, {name} - thanks for talking it through."]
+    def trivial(name):
+        return any(w in name.lower() for w in
+                   ("greeting", "communication", "rapport", "comfort",
+                    "background", "icebreaker"))
+
+    # Saying "we got into Communication / Professional Greeting properly" is
+    # exactly the false-coverage claim this message exists to avoid.
+    unproven = [k for k, v in ledger.items()
+                if v.get("status") == "unproven" and not trivial(k)]
+    confirmed = [k for k, v in ledger.items()
+                 if v.get("status") == "confirmed" and not trivial(k)]
+
+    substantive = [k for k, v in ledger.items()
+                   if v.get("status") in ("confirmed", "partial", "unproven",
+                                          "no_experience")
+                   and not any(w in k.lower()
+                               for w in ("greeting", "communication", "rapport"))]
+
+    parts = [f"That's our time, {name} - thanks for talking it through."]
+
+    # Never imply an area was assessed when it was not. A closing that claims
+    # good coverage over an interview that established nothing is a lie the
+    # candidate will see contradicted in their own report.
     if confirmed:
-        parts.append("We covered " + ", ".join(confirmed[:3]) + " in good detail.")
+        parts.append("We got into " + ", ".join(confirmed[:3]) + " properly.")
+    elif substantive:
+        parts.append(
+            "I wasn't able to get much technical detail today, so there's less "
+            "here than I'd have liked.")
     if unproven:
         parts.append(
             "We didn't manage to pin down " + ", ".join(unproven[:2]) +
-            " - worth having concrete examples ready for that next time."
-        )
-    parts.append("Your detailed report will follow shortly. Best of luck!")
+            " - worth having a concrete example ready for those.")
+    parts.append("Your report will follow shortly. Best of luck!")
     return " ".join(parts)
 
 
