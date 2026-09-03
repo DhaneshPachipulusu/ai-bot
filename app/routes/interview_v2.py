@@ -67,6 +67,19 @@ NON_COMPETENCY_NAMES = {
     "communication", "rapport",
 }
 
+# Depth ladder rung a competency must reach before it can be "confirmed".
+# 1 concept, 2 application, 3 personal implementation, 4 concrete detail,
+# 5 failure case, 6 trade-off.
+CONFIRM_REQUIRES_DEPTH = 4
+
+# Turns a competency may hold while the candidate is still climbing the ladder.
+# The coverage guard caps a competency at 3 turns, but reaching a trade-off
+# question is depth 6 and takes about five - so the guard made the top of the
+# ladder unreachable and no trade-off question was ever asked. A competency
+# whose depth is still increasing has earned the extra turns; one that is
+# stuck has not.
+MAX_TURNS_WHILE_DEEPENING = 6
+
 MAX_CONSECUTIVE_REDIRECTS = 3
 
 
@@ -113,6 +126,54 @@ def topic_ask_counts(conversation):
         for name in topics_in(turn.get("text", "")):
             counts[name] = counts.get(name, 0) + 1
     return counts
+
+
+# The depth ladder asked for these in prose and got zero of them across 69
+# interviewer turns. Naming the exact question and making it a directive is
+# the difference between a rule the model follows and one it does not.
+DEPTH_PROBES = {
+    4: ("concrete detail",
+        "Ask for one specific mechanism: the exact call, the exact field, "
+        "the exact config value. \"What did the code actually do when that "
+        "request arrived?\""),
+    5: ("failure case",
+        "Ask what went wrong: \"What happened when that broke - and how did "
+        "you find out?\" A candidate who has really built it has a failure "
+        "story; one who has read about it does not."),
+    6: ("trade-off",
+        "Ask why this and not the alternative: \"Why that approach over the "
+        "obvious alternative, and what did it cost you?\" or \"What would "
+        "you change if you rebuilt it now?\""),
+}
+
+
+def next_depth_probe(depth_by_competency, current_competency):
+    """The rung this competency owes before it can be confirmed."""
+    if not current_competency:
+        return None
+    reached = int(depth_by_competency.get(current_competency, 0) or 0)
+    if reached < 3 or reached >= 6:
+        return None
+    return reached + 1, DEPTH_PROBES.get(reached + 1)
+
+
+def collect_claims(conversation):
+    """Every claim the candidate has made, with the turn it was made on.
+
+    Layer 3 makes checking a new answer against earlier claims the highest
+    priority, but layer 2 only ever showed the last eight turns truncated to
+    200 characters. A claim made on turn 2 was gone by turn 10, so
+    contradiction detection was structurally impossible - claim_check came
+    back "none" in every transcript, including one where the candidate
+    contradicted himself three times. Claims are accumulated here instead, so
+    they survive the context window.
+    """
+    claims = []
+    for i, turn in enumerate(conversation):
+        for c in (turn.get("claims") or []):
+            if isinstance(c, str) and c.strip():
+                claims.append({"turn": i, "claim": c.strip()[:120]})
+    return claims
 
 
 def detect_repetition(conversation, latest_answer):
@@ -468,6 +529,16 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
             break
 
     repeat_hits, repeat_sim = detect_repetition(conversation, candidate_answer)
+    claims_so_far = collect_claims(conversation)
+
+    # Deepest rung reached per competency, so the model can see what still
+    # needs a trade-off or failure-case probe before it can be confirmed.
+    depth_by_competency = {}
+    for turn in conversation:
+        nm = turn.get("competency_name")
+        if nm:
+            depth_by_competency[nm] = max(depth_by_competency.get(nm, 0),
+                                          int(turn.get("depth_reached") or 0))
 
     asked = topic_ask_counts(conversation)
     exhausted_topics = sorted(k for k, v in asked.items() if v >= 3)
@@ -493,6 +564,8 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
         "this_answer_repeats_earlier_answers": repeat_hits,
         "max_similarity_to_an_earlier_answer": repeat_sim,
         "competencies_so_far": competency_summary,
+        "every_claim_the_candidate_has_made": claims_so_far,
+        "deepest_probe_level_per_competency": depth_by_competency,
         "question_coverage_tags_used": asked,
         "coverage_tags_exhausted_DO_NOT_ASK_AGAIN": exhausted_topics,
         "coverage_tags_not_yet_used": untouched[:8],
@@ -502,6 +575,31 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
     }, indent=2, ensure_ascii=False)
 
     untouched_list = ", ".join(untouched[:8]) or "none left"
+
+    # A competency sitting at depth 3+ is one question away from being
+    # provable. Spell that question out rather than hoping the ladder is read.
+    # Depth on the two most recent turns for this competency: if it rose, the
+    # candidate is producing evidence and the coverage cap should not fire.
+    _recent = [int(x.get("depth_reached") or 0)
+               for x in conversation
+               if x.get("role") == "interviewer"
+               and x.get("competency_name") == current_competency]
+    deepening = len(_recent) >= 2 and _recent[-1] > _recent[-2]
+    turn_cap = (MAX_TURNS_WHILE_DEEPENING if deepening
+                else MAX_CONSECUTIVE_REDIRECTS)
+
+    _probe = next_depth_probe(depth_by_competency, current_competency)
+    depth_directive = ""
+    if _probe:
+        lvl, (label, how) = _probe
+        depth_directive = (
+            "ASK THE " + label.upper() + " QUESTION NOW - HIGHEST PRIORITY.\n"
+            + chr(34) + current_competency + chr(34)
+            + " has reached depth " + str(lvl - 1)
+            + " and cannot be confirmed below depth "
+            + str(CONFIRM_REQUIRES_DEPTH) + ". " + how + "\n"
+            + "Do not pivot to a new topic this turn. Set depth_reached="
+            + str(lvl) + ".\n\n")
 
     # ---- Layer 3: this turn's task + output contract -----------------
     # Precedence matters. A fresh technical contradiction is the single most
@@ -541,9 +639,16 @@ PRIORITY 4 - ANSWER WAS FINE.
 Probe one level deeper on it (depth ladder), or move to a competency still
 "not_assessed".
 
-COVERAGE GUARD - applies regardless of the above.
+{depth_directive}DEPTH BEFORE COVERAGE - one exception to the guard below.
+If the current competency has reached depth 3 and the candidate is answering
+well, you get ONE more turn to ask the trade-off or failure-case question that
+would confirm it. Coverage beats depth in general; it does not beat closing out
+a competency you are one question away from proving.
+
+COVERAGE GUARD - applies otherwise.
 You have spent {competency_attempts} consecutive turns on
-"{current_competency}". At 3 or more, STOP: mark it with the best status the
+"{current_competency}"; your limit this turn is {turn_cap} (raised while the
+candidate keeps producing deeper evidence). At the limit, STOP: mark it with the best status the
 evidence supports and move to a DIFFERENT competency, even if the candidate is
 strong and you merely want more detail. Coverage beats depth on one point.
 
@@ -572,6 +677,12 @@ Decide the single next thing to say. Ground any project or skill question in
 the resume above - name the actual project. Never invent projects, companies or
 technologies the resume does not mention.
 
+A competency may NOT be marked "confirmed" below depth 4. Levels 1-3 are
+description; 4-6 are evidence. If you want to confirm something, ask the
+failure-case or trade-off question first - "what happened when that broke?",
+"why that and not the alternative?", "what would you change now?". Those are
+the highest-yield questions in an interview and the ones most often skipped.
+
 Status rules: "confirmed" needs a specific thing they personally did - a
 textbook definition is "partial" at best. Use "no_experience" when they simply
 have not used it and said so; use "unproven" only when they claimed it and
@@ -599,7 +710,9 @@ Return ONLY valid JSON, no markdown fence:
 {{
   "answered_question": true or false,
   "answer_class": "direct | partial | related_but_off | unrelated | unclear | dont_know | contradiction",
-  "claim_check": "none, or a one-line description of the inconsistency found",
+  "claims_in_this_answer": ["short phrases the candidate asserted, e.g. 'real-time tracking', 'deployed on kubernetes', 'handles millions of requests'"],
+  "claim_check": "none, or a one-line description of an inconsistency with every_claim_the_candidate_has_made above",
+  "depth_reached": "1-6 on the depth ladder: 1 concept, 2 application, 3 personal implementation, 4 concrete detail, 5 failure case, 6 trade-off",
   "answer_quality": "strong | adequate | weak | evasive | off_topic",
   "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
   "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | no_experience | not_assessed", "note": "one line of evidence"}},
@@ -1011,7 +1124,25 @@ async def respond(request: RespondRequest):
     claim_check = ai_response.get("claim_check", "none")
     answer_quality = ai_response.get("answer_quality", "")
 
+    claims_in_answer = ai_response.get("claims_in_this_answer") or []
+    if not isinstance(claims_in_answer, list):
+        claims_in_answer = []
+    try:
+        depth_reached = max(0, min(6, int(ai_response.get("depth_reached") or 0)))
+    except (TypeError, ValueError):
+        depth_reached = 0
+
     comp = ai_response.get("competency") or {}
+
+    # Confirmed means evidence, and evidence starts at the concrete rung. A
+    # model that has only heard a description will still call it confirmed, so
+    # enforce the floor rather than asking for it in prose.
+    if isinstance(comp, dict) and comp.get("status") == "confirmed"             and depth_reached and depth_reached < CONFIRM_REQUIRES_DEPTH:
+        comp = dict(comp)
+        comp["status"] = "partial"
+        comp["note"] = ((comp.get("note") or "") +
+                        " (described but not probed to failure/trade-off)").strip()
+        print(f"↓ {comp.get('name')} confirmed->partial (depth {depth_reached})")
 
     # The model will otherwise reuse the coverage tags above as competency
     # names, collapsing every demonstrated skill into one "internship" entry
@@ -1146,7 +1277,9 @@ async def respond(request: RespondRequest):
         "claim_check": claim_check,
         "answer_quality": answer_quality,
         "competency_name": (comp.get("name") if isinstance(comp, dict) else None),
-        "repeats_earlier": repeat_hits
+        "repeats_earlier": repeat_hits,
+        "depth_reached": depth_reached,
+        "claims": claims_in_answer
     })
     
     await asyncio.to_thread(save_interview, interview)

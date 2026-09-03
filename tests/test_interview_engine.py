@@ -323,3 +323,75 @@ def test_honest_candidate_with_broad_evidence_can_reach_ready():
     r = score(led(A="confirmed", B="confirmed", C="confirmed", D="confirmed",
                   E="confirmed", F="no_experience"))
     assert r["job_readiness"] == "Ready"
+
+
+# ------------------------------------------------- claims survive the window
+def test_claims_survive_the_truncated_context_window():
+    """Layer 3 made checking earlier claims the top priority while layer 2
+    passed only the last 8 turns truncated to 200 chars, so a claim from turn
+    2 was invisible by turn 10 and claim_check was "none" in every transcript
+    - including one where the candidate contradicted himself three times."""
+    from app.routes.interview_v2 import collect_claims
+    conv = [{"role": "candidate", "text": "...",
+             "claims": ["deployed on kubernetes"]}]
+    conv += [{"role": "candidate", "text": "filler"} for _ in range(20)]
+    conv.append({"role": "candidate", "text": "...",
+                 "claims": ["it was a team project"]})
+    claims = collect_claims(conv)
+    assert [c["claim"] for c in claims] == ["deployed on kubernetes",
+                                            "it was a team project"]
+    assert claims[0]["turn"] == 0
+
+
+def test_collect_claims_ignores_malformed_entries():
+    from app.routes.interview_v2 import collect_claims
+    conv = [{"role": "candidate", "claims": ["real", "", None, 42]},
+            {"role": "candidate"}]
+    assert [c["claim"] for c in collect_claims(conv)] == ["real"]
+
+
+# ------------------------------------------------------------- depth ladder
+def test_confirmation_requires_reaching_the_evidence_rungs():
+    """Zero trade-off or failure-case questions were asked across 69
+    interviewer turns, because the coverage guard always pivoted first - yet
+    competencies were still being marked confirmed off a description."""
+    from app.routes.interview_v2 import CONFIRM_REQUIRES_DEPTH
+    assert CONFIRM_REQUIRES_DEPTH >= 4
+
+
+# --------------------------------------------------- depth probe escalation
+def test_depth_probe_is_due_only_once_the_ladder_is_climbed():
+    from app.routes.interview_v2 import next_depth_probe
+    assert next_depth_probe({"Docker": 0}, "Docker") is None
+    assert next_depth_probe({"Docker": 2}, "Docker") is None
+    assert next_depth_probe({"Docker": 3}, "Docker")[0] == 4
+    assert next_depth_probe({"Docker": 5}, "Docker")[0] == 6
+    assert next_depth_probe({"Docker": 6}, "Docker") is None
+    assert next_depth_probe({}, None) is None
+
+
+def test_each_probe_names_the_actual_question_to_ask():
+    """Asking for trade-off questions in prose produced zero across 69 turns.
+    The directive has to contain the question itself."""
+    from app.routes.interview_v2 import DEPTH_PROBES
+    assert "?" in DEPTH_PROBES[5][1] and "broke" in DEPTH_PROBES[5][1]
+    assert "?" in DEPTH_PROBES[6][1]
+    assert "alternative" in DEPTH_PROBES[6][1]
+
+
+def test_directive_text_has_no_stray_control_characters():
+    """A \n written into a non-raw patch string produced a real newline
+    inside an f-string and broke the module once already."""
+    from app.routes.interview_v2 import DEPTH_PROBES
+    for _lvl, (label, how) in DEPTH_PROBES.items():
+        assert not any(ord(c) < 32 for c in label + how)
+
+
+def test_deep_dive_gets_more_turns_than_a_stuck_probe():
+    """Reaching a trade-off question is depth 6 and takes about five turns on
+    one competency, but the coverage guard pivoted at three - so the top of
+    the ladder was unreachable and no trade-off question was ever asked."""
+    from app.routes.interview_v2 import (MAX_TURNS_WHILE_DEEPENING,
+                                         MAX_CONSECUTIVE_REDIRECTS)
+    assert MAX_TURNS_WHILE_DEEPENING >= 5
+    assert MAX_TURNS_WHILE_DEEPENING > MAX_CONSECUTIVE_REDIRECTS
