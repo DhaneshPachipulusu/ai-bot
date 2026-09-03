@@ -450,8 +450,8 @@ export default function AdminDashboard() {
                           user.avg_score > 0 ? "bg-red-500/20 text-red-400" :
                           "bg-gray-500/20 text-gray-400"
                         }`}>
-                          {user.avg_score >= 7 ? "Job Ready" :
-                           user.avg_score >= 5 ? "Developing" :
+                          {user.avg_score >= 7.5 ? "Job Ready" :
+                           user.avg_score >= 5.5 ? "Developing" :
                            user.avg_score > 0 ? "Needs Work" : "No Data"}
                         </span>
                       </td>
@@ -681,7 +681,7 @@ export default function AdminDashboard() {
                     selectedUser.avg_score >= 7 ? "text-green-400" : 
                     selectedUser.avg_score >= 5 ? "text-yellow-400" : "text-red-400"
                   }`}>
-                    {selectedUser.avg_score >= 7 ? "Ready" : selectedUser.avg_score >= 5 ? "Developing" : "Needs Work"}
+                    {selectedUser.avg_score >= 7.5 ? "Ready" : selectedUser.avg_score >= 5.5 ? "Developing" : "Needs Work"}
                   </p>
                 </div>
               </div>

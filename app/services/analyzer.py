@@ -160,7 +160,31 @@ def analyze_interview(conversation_path: str) -> dict:
         merged["overall_score"] = score_block["overall_score"]
         merged["competencies"] = ledger
         merged["evidence_ratio"] = score_block.get("evidence_ratio")
+        # The AI block writes prettier prose but its readiness call is not
+        # evidence-based; letting it through is how one candidate ended up
+        # labelled differently in the report and on the dashboard.
+        merged["job_readiness"] = score_block["job_readiness"]
+        for k in ("strengths", "improvements", "evidence_confidence",
+                  "competencies_assessed", "scored_dimensions"):
+            if k in score_block:
+                merged[k] = score_block[k]
     return merged
+
+
+# One definition, used by the analyzer, the AI prompt and the admin dashboard.
+# These disagreed: the report called 7.3 "Developing" while the dashboard
+# called the same number "Job Ready", which a placement officer would spot
+# immediately.
+READY_AT = 7.5
+DEVELOPING_AT = 5.5
+
+
+def readiness_label(overall: float) -> str:
+    if overall >= READY_AT:
+        return "Ready"
+    if overall >= DEVELOPING_AT:
+        return "Developing"
+    return "Needs Work"
 
 
 def apply_competency_evidence(score_block: dict, ledger: dict,
@@ -191,6 +215,13 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     # count toward how much was assessed without dragging the ratio down the
     # way an unsupported claim does.
     no_exp = statuses.count("no_experience")
+    # A probe the model labelled "not_assessed" but annotated as a dodge is a
+    # failed probe. Leaving it out of the denominator made the identical
+    # behaviour free or costly depending on which word the model picked.
+    dodged = sum(1 for v in scored.values()
+                 if v.get("status") == "not_assessed"
+                 and (v.get("note") or "").strip())
+    unproven += dodged
     assessed = confirmed + partial + unproven + no_exp
     if not assessed:
         # Every recorded competency was a greeting or rapport note, so an
@@ -242,18 +273,24 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     blend("communication", 0.30)
     blend("confidence", 0.25)
 
-    overall = round(sum(scores.values()) / len(scores), 1)
+    # pace and confidence are delivery traits, never blended with evidence,
+    # and carry adverse-impact risk on accent and nervousness - which the
+    # interviewer prompt explicitly forbids judging. Keep them on the report
+    # as observations; keep them out of the number that ranks people.
+    JOB_RELATED = ("technical", "problem_solving", "clarity", "communication")
+    graded = [scores[k] for k in JOB_RELATED if k in scores]
+    overall = round(sum(graded) / max(len(graded), 1), 1)
 
     out = dict(score_block)
     out["scores"] = scores
     out["overall_score"] = overall
     out["evidence_ratio"] = round(evidence, 2)
     out["evidence_confidence"] = round(confidence, 2)
+    out["scored_dimensions"] = list(JOB_RELATED)
+    out["observation_only"] = ["pace", "confidence"]
     out["competencies_assessed"] = assessed
     out["competencies"] = ledger
-    out["job_readiness"] = ("Ready" if overall >= 8
-                            else "Developing" if overall >= 6
-                            else "Needs Work")
+    out["job_readiness"] = readiness_label(overall)
 
     proven = [k for k, v in scored.items() if v.get("status") == "confirmed"]
     gaps = [(k, v.get("note", "")) for k, v in scored.items()
@@ -407,11 +444,7 @@ def rule_interview_scores(qa_pairs: list) -> dict:
         "overall_score": overall,
         "strengths": strengths,
         "improvements": improvements,
-        "job_readiness": (
-            "Ready" if overall >= 8
-            else "Developing" if overall >= 6
-            else "Needs Work"
-        ),
+        "job_readiness": readiness_label(overall),
     }
 
 

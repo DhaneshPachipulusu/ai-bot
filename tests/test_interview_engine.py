@@ -244,3 +244,82 @@ def test_no_control_characters_in_the_narration_pattern():
     became a literal backspace byte, so nothing ever matched."""
     from app.routes.interview_v2 import _NARRATION
     assert not any(ord(c) < 32 for c in _NARRATION.pattern)
+
+
+# ------------------------------------------------------- role classification
+def test_a_java_backend_candidate_is_not_labelled_devops():
+    """Docker was matched before Java, so two Java backend candidates were
+    interviewed for DevOps and then charged "unproven" on cloud questions
+    they were never applying for."""
+    from app.routes.interview_v2 import detect_role
+    assert detect_role(["Java", "Spring Boot", "PostgreSQL", "Docker",
+                        "JUnit"]) == "Java Developer"
+    assert detect_role(["Java", "Spring Boot", "MySQL", "Docker"]) == "Java Developer"
+
+
+def test_ml_does_not_match_html():
+    from app.routes.interview_v2 import detect_role
+    assert detect_role(["HTML", "CSS"]) != "ML Engineer"
+
+
+def test_genuine_infrastructure_skills_still_classify_that_way():
+    from app.routes.interview_v2 import detect_role
+    assert detect_role(["Kubernetes", "Jenkins", "Ansible"]) == "DevOps Engineer"
+
+
+# ------------------------------------------------------- competency naming
+@pytest.mark.parametrize("name", ["Kubernetes", "Testing", "Database",
+                                  "Docker", "Kafka", "Spring", "Cache"])
+def test_technology_names_are_kept_as_competencies(name):
+    """These collided with the question-routing tags and were silently
+    discarded, deleting confirmed evidence and moving the score."""
+    from app.routes.interview_v2 import NON_COMPETENCY_NAMES
+    assert name.lower() not in NON_COMPETENCY_NAMES
+
+
+@pytest.mark.parametrize("name", ["internship", "behavioural", "greeting",
+                                  "project", "career", "background"])
+def test_conversation_sections_are_rejected_as_competencies(name):
+    from app.routes.interview_v2 import NON_COMPETENCY_NAMES
+    assert name in NON_COMPETENCY_NAMES
+
+
+# ------------------------------------------------------------- score model
+def test_report_and_dashboard_agree_on_readiness():
+    """The report called 7.3 "Developing" while the admin dashboard called the
+    same number "Job Ready"."""
+    from app.services.analyzer import readiness_label
+    r = score(led(A="confirmed", B="confirmed", C="confirmed",
+                  D="confirmed", E="no_experience"))
+    assert r["job_readiness"] == readiness_label(r["overall_score"])
+
+
+def test_delivery_traits_are_not_part_of_the_composite():
+    """pace was never blended with evidence - constant 7 for every candidate -
+    yet carried a sixth of the score."""
+    r = score(led(A="confirmed", B="confirmed", C="confirmed"))
+    assert "pace" not in r["scored_dimensions"]
+    assert "confidence" not in r["scored_dimensions"]
+    assert set(r["observation_only"]) == {"pace", "confidence"}
+
+
+def test_a_dodged_probe_is_not_free():
+    """A failed probe labelled not_assessed was excluded from the denominator,
+    so the same behaviour cost nothing or cost a lot depending on which word
+    the model happened to pick."""
+    dodged = apply_competency_evidence(dict(BASE), {
+        "Java Exceptions": {"status": "not_assessed",
+                            "note": "gave a canned summary instead of answering"},
+        "Docker": {"status": "confirmed", "note": "multi-stage build"}})
+    clean = apply_competency_evidence(dict(BASE), {
+        "Docker": {"status": "confirmed", "note": "multi-stage build"}})
+    assert dodged["evidence_ratio"] < clean["evidence_ratio"]
+
+
+def test_honest_candidate_with_broad_evidence_can_reach_ready():
+    """Five confirmed competencies plus one openly declared gap was rated
+    "Developing" - the label punished breadth, since a wider interview has
+    more chances to surface a gap."""
+    r = score(led(A="confirmed", B="confirmed", C="confirmed", D="confirmed",
+                  E="confirmed", F="no_experience"))
+    assert r["job_readiness"] == "Ready"

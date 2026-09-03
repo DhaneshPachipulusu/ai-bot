@@ -59,6 +59,14 @@ for _m in ("gemini-3.5-flash-lite", GEMINI_MODEL, "gemini-2.5-flash-lite"):
 # Retrying is worth a few seconds, never the 37s the API sometimes suggests.
 # Escalation ladder: clarify -> concrete prompt -> diagnose -> pivot. Three
 # attempts at one competency, never a fourth.
+# Words that name where you are in the interview, not what the candidate can
+# do. Technology names are deliberately absent.
+NON_COMPETENCY_NAMES = {
+    "internship", "behavioural", "behavioral", "project", "career", "greeting",
+    "background", "general", "none", "n/a", "self intro", "introduction",
+    "communication", "rapport",
+}
+
 MAX_CONSECUTIVE_REDIRECTS = 3
 
 
@@ -792,10 +800,45 @@ def get_fallback_questions(target_role: str, skills: list, mode: str) -> list:
     return questions
 
 
+# Ordered most-specific-language-or-framework first. Infrastructure tools sit
+# near the bottom because almost every backend engineer lists Docker, and
+# matching on it first classified two Java backend candidates as DevOps - who
+# were then interviewed on Terraform and charged "unproven" for not knowing it.
+# Substrings are anchored on word boundaries: "ml" used to match "html".
+_ROLE_RULES = [
+    ("ML Engineer", ("machine learning", "tensorflow", "pytorch", "scikit",
+                     "deep learning")),
+    ("Data Engineer", ("spark", "airflow", "hadoop", "etl", "data warehouse")),
+    ("Java Developer", ("java", "spring", "spring boot", "hibernate", "jpa")),
+    ("Python Developer", ("django", "flask", "fastapi", "pandas", "python")),
+    ("Frontend Developer", ("react", "angular", "vue", "frontend", "next.js")),
+    ("Backend Developer", ("express", "node.js", "nestjs", "golang", ".net")),
+    ("Cloud Engineer", ("aws", "azure", "gcp", "terraform", "cloudformation")),
+    ("DevOps Engineer", ("kubernetes", "jenkins", "devops", "ansible",
+                         "ci/cd", "docker")),
+]
+
+
 def detect_role(skills: list) -> str:
-    """Detect role from skills."""
+    """Best-effort role guess from resume skills.
+
+    Only a fallback: an explicit target_role from the caller always wins. A
+    wrong guess here does real damage, because the whole interview is then
+    aimed at a job the candidate did not apply for and the gaps land on their
+    report as if they were the candidate's.
+    """
     if not skills:
         return "Software Developer"
+
+    tokens = {w for s in skills for w in re.findall(r"[a-z0-9+#./]+", s.lower())}
+    joined = " ".join(s.lower() for s in skills)
+
+    for role, keys in _ROLE_RULES:
+        for k in keys:
+            hit = (k in tokens) if " " not in k and "." not in k else (k in joined)
+            if hit:
+                return role
+    return "Software Developer"
     
     s = " ".join(s.lower() for s in skills)
     
@@ -973,9 +1016,14 @@ async def respond(request: RespondRequest):
     # The model will otherwise reuse the coverage tags above as competency
     # names, collapsing every demonstrated skill into one "internship" entry
     # that overwrites itself each turn.
+    # Reject only names that describe a SECTION of the conversation. Technology
+    # names collide with the routing tags ("Kubernetes", "Testing", "Docker",
+    # "Database", "Spring", "Kafka", "Cache") and are perfectly good competency
+    # names - discarding those was deleting confirmed evidence and quietly
+    # moving the candidate's score.
     if isinstance(comp, dict):
         nm = (comp.get("name") or "").strip().lower()
-        if nm in TOPIC_WORDS or nm in ("none", "n/a", "general", "background"):
+        if nm in NON_COMPETENCY_NAMES:
             comp = {}
 
     # Pivoting away from a topic without recording it loses the finding. The
