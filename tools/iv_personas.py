@@ -5,23 +5,52 @@ actually asked, without spending API calls on a second model driving them.
 """
 
 
-def pick(bank, question, used):
-    """Pick the answer whose keywords best match the question.
+# What a real candidate says once they have genuinely covered their material,
+# rather than mechanically repeating an earlier answer. Reusing a bank entry
+# makes the engine's repetition detector fire on an artefact of this harness
+# instead of on real candidate behaviour.
+EXHAUSTED = [
+    "i think i already covered that one earlier sir",
+    "hmm, i dont think i have anything more to add on that",
+    "sorry, thats about all i can say on that topic",
+    "i havent worked on that specifically, so i cant say much",
+    "that one i would have to think about, i dont have an example ready",
+]
 
-    Already-used answers are penalised so a persona does not parrot itself,
-    but they stay available - a candidate repeating themselves is realistic
-    and is exactly what the deflection logic needs to see.
+
+def pick(bank, question, used, allow_reuse=False):
+    """Pick the unused answer whose keywords best match the question.
+
+    Used answers are not returned at all unless allow_reuse is set. Once the
+    bank is exhausted the candidate says so in plain language, which is what a
+    real person does and what the engine should be scored against.
     """
     q = (question or "").lower()
+
+    # A strongly matching answer is reused even if already given: asked about
+    # Docker twice, a real candidate repeats their Docker answer rather than
+    # switching to HashMaps. Weak matches skip used entries so the persona
+    # does not repeat itself for no reason.
     best, best_score = None, 0
     for key, (kws, _text) in bank.items():
         score = sum(2 for k in kws if k in q)
-        if key in used:
-            score -= 3
+        if key in used and not allow_reuse and score < 4:
+            continue
         if score > best_score:
             best, best_score = key, score
-    if best is None or best_score <= 0:
-        best = next((k for k in bank if k not in used), list(bank)[-1])
+
+    if best is None:
+        remaining = [k for k in bank if k not in used]
+        if remaining:
+            best = remaining[0]
+        else:
+            # `used` stops growing once the bank is empty, so track exhaustion
+            # separately or every remaining turn returns the same sentence -
+            # which would trip the repetition detector all over again.
+            n = sum(1 for k in used if str(k).startswith("__spent"))
+            used.add("__spent%d" % n)
+            return EXHAUSTED[n % len(EXHAUSTED)]
+
     used.add(best)
     return bank[best][1]
 

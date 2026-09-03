@@ -66,6 +66,47 @@ def _tokens(text):
     return {w for w in re.findall(r"[a-z]{4,}", (text or "").lower())}
 
 
+# Topics worth tracking by name. Counting competency names does not work:
+# the model calls the same subject "Docker", "Containerization", "Docker &
+# Deployment" or omits it entirely, so a per-name counter resets every turn
+# and the same question gets asked seven times.
+TOPIC_WORDS = {
+    "docker": ("docker", "container", "dockerfile", "image"),
+    "kubernetes": ("kubernetes", "k8s", "pod", "orchestr"),
+    "ci_cd": ("ci/cd", "pipeline", "jenkins", "github action", "deploy"),
+    "iac": ("terraform", "ansible", "cloudformation", "infrastructure as code"),
+    "cloud": ("aws", "azure", "gcp", "cloud", "ec2", "s3"),
+    "database": ("postgres", "mysql", "sql", "index", "query", "transaction"),
+    "kafka": ("kafka", "queue", "message broker", "event stream"),
+    "cache": ("redis", "cache", "caching"),
+    "testing": ("test", "junit", "pytest", "testcontainer", "mock"),
+    "java_core": ("hashmap", "collection", "thread", "concurren", "interface",
+                  "abstract class", "exception"),
+    "spring": ("spring", "dependency injection", "bean", "jpa", "hibernate"),
+    "internship": ("internship", "intern ", "company", "responsibilit"),
+    "project": ("project", "you build", "you built", "architecture"),
+    "behavioural": ("disagree", "conflict", "team", "pressure", "deadline"),
+    "career": ("five years", "career", "goal", "strength"),
+}
+
+
+def topics_in(text):
+    low = (text or "").lower()
+    return {name for name, words in TOPIC_WORDS.items()
+            if any(w in low for w in words)}
+
+
+def topic_ask_counts(conversation):
+    """How many interviewer questions have already touched each topic."""
+    counts = {}
+    for turn in conversation:
+        if turn.get("role") != "interviewer":
+            continue
+        for name in topics_in(turn.get("text", "")):
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
 def detect_repetition(conversation, latest_answer):
     """How many earlier answers were substantially the same as this one.
 
@@ -420,6 +461,10 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
 
     repeat_hits, repeat_sim = detect_repetition(conversation, candidate_answer)
 
+    asked = topic_ask_counts(conversation)
+    exhausted_topics = sorted(k for k, v in asked.items() if v >= 3)
+    untouched = sorted(set(TOPIC_WORDS) - set(asked))
+
     # ---- Layer 2: interview state -----------------------------------
     # Everything that varies per turn, as structured data rather than prose.
     # The model reasons better over a labelled state block than over a wall of
@@ -440,8 +485,15 @@ async def generate_dynamic_response(interview: dict, candidate_answer: str) -> d
         "this_answer_repeats_earlier_answers": repeat_hits,
         "max_similarity_to_an_earlier_answer": repeat_sim,
         "competencies_so_far": competency_summary,
+        "question_coverage_tags_used": asked,
+        "coverage_tags_exhausted_DO_NOT_ASK_AGAIN": exhausted_topics,
+        "coverage_tags_not_yet_used": untouched[:8],
+        "NOTE_on_coverage_tags": ("These are question-routing tags only. NEVER "
+                                  "use them as a competency name."),
         "recent_conversation": conv_text,
     }, indent=2, ensure_ascii=False)
+
+    untouched_list = ", ".join(untouched[:8]) or "none left"
 
     # ---- Layer 3: this turn's task + output contract -----------------
     # Precedence matters. A fresh technical contradiction is the single most
@@ -487,6 +539,14 @@ You have spent {competency_attempts} consecutive turns on
 evidence supports and move to a DIFFERENT competency, even if the candidate is
 strong and you merely want more detail. Coverage beats depth on one point.
 
+TOPIC BUDGET - HARD RULE, overrides everything above.
+Topics already asked about, with counts: {asked}
+BANNED, asked three or more times already: {exhausted_topics}
+You may NOT ask about a banned topic again in any form or wording. Whatever
+you were going to establish there, you will not establish by asking a seventh
+time - record it from what you already have and choose something else.
+Untouched topics you could use instead: {untouched_list}
+
 REPETITION GUARD.
 This answer substantially repeats {repeat_hits} earlier answer(s)
 (similarity {repeat_sim}). If that count is 2 or more, do not ask a more
@@ -504,6 +564,15 @@ Decide the single next thing to say. Ground any project or skill question in
 the resume above - name the actual project. Never invent projects, companies or
 technologies the resume does not mention.
 
+Name the competency for the SKILL the answer actually evidenced, not for the
+section of the interview you are in. Good names: "PostgreSQL Indexing",
+"Docker Image Packaging", "Idempotency Design", "Java Concurrency",
+"Integration Testing". Bad names, never use these: "internship", "greeting",
+"behavioural", "project", "background" - those describe where you are in the
+conversation, not what the candidate proved. If one answer demonstrates a real
+skill, record THAT skill, even if you asked the question to probe something
+else.
+
 Also record what you now know about the competency you were probing. That
 ledger is the real output of the interview: "Internship Experience: unproven -
 repeatedly redirected to a college project, never named the company" is worth
@@ -516,7 +585,7 @@ Return ONLY valid JSON, no markdown fence:
   "claim_check": "none, or a one-line description of the inconsistency found",
   "answer_quality": "strong | adequate | weak | evasive | off_topic",
   "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
-  "competency": {{"name": "e.g. Spring Boot Fundamentals", "status": "confirmed | partial | unproven | not_assessed", "note": "one line of evidence"}},
+  "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | not_assessed", "note": "one line of evidence"}},
   "decision": "follow_up | dig_deeper | challenge | redirect | diagnose | move_on | encourage | close",
   "acknowledgment": "Neutral bridge. No praise unless specifically earned.",
   "question": "Your single next question",
@@ -891,6 +960,14 @@ async def respond(request: RespondRequest):
     answer_quality = ai_response.get("answer_quality", "")
 
     comp = ai_response.get("competency") or {}
+
+    # The model will otherwise reuse the coverage tags above as competency
+    # names, collapsing every demonstrated skill into one "internship" entry
+    # that overwrites itself each turn.
+    if isinstance(comp, dict):
+        nm = (comp.get("name") or "").strip().lower()
+        if nm in TOPIC_WORDS or nm in ("none", "n/a", "general", "background"):
+            comp = {}
 
     # Pivoting away from a topic without recording it loses the finding. The
     # model reliably moves on but does not reliably write down what it just

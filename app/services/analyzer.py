@@ -215,13 +215,21 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     # 1.0 = every probed competency held up, 0.0 = none did.
     evidence = (confirmed + 0.5 * partial) / assessed
 
+    # One confirmed competency is not the same evidence as six. Without this,
+    # an interview that only ever established Docker scored a perfect 10 on
+    # technical, because 1-of-1 and 6-of-6 both read as a ratio of 1.0.
+    # Around five probed competencies is where the ratio starts to mean
+    # something; below that the heuristic keeps most of its weight.
+    confidence = min(1.0, assessed / 5.0)
+
     scores = dict(score_block.get("scores") or {})
 
     def blend(key, weight):
         """Pull a heuristic score toward the evidence ratio."""
         base = scores.get(key, 6)
         target = 2.0 + 8.0 * evidence
-        scores[key] = max(1, min(10, round(base + (target - base) * weight)))
+        scores[key] = max(1, min(10, round(
+            base + (target - base) * weight * confidence)))
 
     # Weighted by how much each dimension depends on demonstrated substance.
     blend("technical", 0.85)
@@ -236,6 +244,8 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     out["scores"] = scores
     out["overall_score"] = overall
     out["evidence_ratio"] = round(evidence, 2)
+    out["evidence_confidence"] = round(confidence, 2)
+    out["competencies_assessed"] = assessed
     out["competencies"] = ledger
     out["job_readiness"] = ("Ready" if overall >= 8
                             else "Developing" if overall >= 6
@@ -247,13 +257,46 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
 
     strengths = [f"{k} - {ledger[k].get('note') or 'demonstrated with specifics'}"
                  for k in proven[:5]]
-    improvements = [
-        f"{k} - claimed but not substantiated. {note}".strip()
-        for k, note in gaps[:5]
-    ]
-    if unproven and unproven >= confirmed:
+    # "Claimed but not substantiated" is the right words for a resume skill the
+    # candidate could not back up. It is the wrong words - and discouraging -
+    # for something they were asked about and honestly said they had not
+    # learned. Telling a student they failed to substantiate a claim they never
+    # made punishes exactly the behaviour an interview should reward.
+    HONEST = ("do not know", "dont know", "don't know", "not know",
+              "haven't used", "havent used", "has not used", "no experience",
+              "only seen videos", "no production experience", "admitted",
+              "honestly stated", "not yet learned", "never used")
+
+    def phrase(name, note):
+        low = (note or "").lower()
+        if any(h in low for h in HONEST):
+            return (f"{name} - no experience yet, which you said openly. That is "
+                    f"the right answer when it is true; the next step is to build "
+                    f"something small with it so you have an example. {note}").strip()
+        return f"{name} - claimed but not substantiated. {note}".strip()
+
+    improvements = [phrase(k, note) for k, note in gaps[:5]]
+    if confidence < 1.0:
+        improvements.append(
+            "Only %d technical area%s could be assessed in this interview, so "
+            "these scores are indicative rather than conclusive. Giving fuller "
+            "answers across more topics would produce a firmer assessment."
+            % (assessed, "" if assessed == 1 else "s"))
+    honest_gaps = sum(
+        1 for k, v in scored.items()
+        if v.get("status") == "unproven"
+        and any(h in (v.get("note") or "").lower() for h in HONEST))
+    claimed_gaps = unproven - honest_gaps
+
+    if honest_gaps and not claimed_gaps:
         improvements.insert(0, (
-            f"{unproven} of {assessed} areas probed could not be backed up with "
+            f"{honest_gaps} area{'' if honest_gaps == 1 else 's'} came up that "
+            "you have not worked with yet, and you said so directly rather than "
+            "bluffing. Interviewers respect that. Build one small project in "
+            "each and you can answer them properly next time."))
+    elif unproven and unproven >= confirmed:
+        improvements.insert(0, (
+            f"{claimed_gaps or unproven} of {assessed} areas probed could not be backed up with "
             "specifics. Prepare a concrete example - what you personally built, "
             "how it worked, and what you would change - for every skill on your "
             "resume."))
