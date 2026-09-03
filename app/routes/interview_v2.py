@@ -578,6 +578,10 @@ conversation, not what the candidate proved. If one answer demonstrates a real
 skill, record THAT skill, even if you asked the question to probe something
 else.
 
+The fields above marked SPOKEN are read aloud to the candidate; the rest are
+internal. Be blunt and repetitive in the internal fields. Keep the spoken ones
+short and human - do not explain your reasoning to the candidate.
+
 Also record what you now know about the competency you were probing. That
 ledger is the real output of the interview: "Internship Experience: unproven -
 repeatedly redirected to a college project, never named the company" is worth
@@ -592,8 +596,8 @@ Return ONLY valid JSON, no markdown fence:
   "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
   "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | no_experience | not_assessed", "note": "one line of evidence"}},
   "decision": "follow_up | dig_deeper | challenge | redirect | diagnose | move_on | encourage | close",
-  "acknowledgment": "Neutral bridge. No praise unless specifically earned.",
-  "question": "Your single next question",
+  "acknowledgment": "SPOKEN. Neutral bridge, usually two or three words. No praise unless earned. Must NOT restate your evaluation or narrate that you are moving on.",
+  "question": "SPOKEN. Your single next question, asked the way a person would ask it.",
   "next_stage": "{current_stage} or the next stage name"
 }}"""
 
@@ -1032,6 +1036,14 @@ async def respond(request: RespondRequest):
         response_text = f"{acknowledgment} {question}"
     else:
         response_text = question
+
+    # Naming the pattern once is good interviewing; doing it every turn is a
+    # template. Allow the first two, strip the rest.
+    if narration_count(interview["conversation_history"]) >= 2:
+        trimmed = strip_narration(response_text)
+        if trimmed != response_text:
+            print("✂️ stripped evaluator narration from spoken turn")
+            response_text = trimmed
     
     # Check if interview should end
     if decision == "close" or next_stage == "completed":
@@ -1167,6 +1179,30 @@ def save_interview(interview: dict):
     for path in [f"data/interviews/{iid}.json", f"data/conversations/{iid}.json"]:
         with open(path, 'w') as f:
             json.dump(interview, f, indent=2)
+
+
+# Openers that narrate the evaluator's state rather than talking to a person.
+# The prompt asks the model to avoid these; this strips them when it does not,
+# because one of them per interview is fine and nine is a template.
+_NARRATION = re.compile(
+    r"^\s*(?:"
+    r"I (?:understand|notice|see)[^.!?]*[.!?]\s*"
+    r"|(?:Since\s+)?[Ww]e(?:'ve| have)\s+(?:covered|discussed|focused|hit|reached|established)[^.!?]*[.!?]\s*"
+    r"|(?:Since\s+)?[Ww]e\s+(?:haven't|aren't|weren't)[^.!?]*[.!?]\s*"
+    r")+",
+    re.IGNORECASE)
+
+
+def strip_narration(text: str) -> str:
+    """Remove a leading evaluator-narration clause, keeping the real question."""
+    out = _NARRATION.sub("", text or "", count=1).strip()
+    return out if len(out) > 25 else (text or "").strip()
+
+
+def narration_count(conversation) -> int:
+    return sum(1 for t in conversation
+               if t.get("role") == "interviewer"
+               and _NARRATION.match(t.get("text") or ""))
 
 
 def build_closing_message(interview: dict, name: str) -> str:
