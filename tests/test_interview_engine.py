@@ -395,3 +395,42 @@ def test_deep_dive_gets_more_turns_than_a_stuck_probe():
                                          MAX_CONSECUTIVE_REDIRECTS)
     assert MAX_TURNS_WHILE_DEEPENING >= 5
     assert MAX_TURNS_WHILE_DEEPENING > MAX_CONSECUTIVE_REDIRECTS
+
+
+# ------------------------------------------------- answer/question relevance
+def test_summary_line_matches_the_ledger():
+    """The report said "1 of 6 areas could not be backed up" over a ledger
+    holding one unproven, three partials and one declared gap - a claim the
+    table directly below it contradicted."""
+    r = apply_competency_evidence(dict(BASE), {
+        "Idempotency": {"status": "confirmed", "note": "concrete"},
+        "Testing": {"status": "unproven", "note": "repeated introduction"},
+        "Caching": {"status": "no_experience", "note": "openly admitted"},
+        "Concurrency": {"status": "partial", "note": "did not answer follow-up"},
+        "Docker": {"status": "partial", "note": "multi-stage build"},
+        "Spring DI": {"status": "partial", "note": "constructor injection"}})
+    summary = r["improvements"][0]
+    assert "Of 6 areas probed" in summary
+    assert "1 could not be backed up" in summary
+    assert "3 were only partly established" in summary
+    assert "1 you openly said you have not used yet" in summary
+
+
+def test_under_probed_partial_is_not_blamed_on_the_candidate():
+    """"Partial because the interview ran out of turns" is a different finding
+    from "partial because the answer was thin"."""
+    r = apply_competency_evidence(dict(BASE), {
+        "Concurrency": {"status": "partial",
+                        "note": "explained it but did not answer the follow-up"},
+        "Docker": {"status": "confirmed", "note": "multi-stage build"}})
+    assert any("not necessarily in you" in s for s in r["improvements"])
+
+
+def test_running_out_of_turns_is_recorded_as_such():
+    """Turn completion is not competency completion - the report must be able
+    to tell the difference."""
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "app", "routes", "interview_v2.py"),
+        encoding="utf-8").read()
+    assert 'interview["end_reason"] = "turn_budget_exhausted"' in src
+    assert 'interview["end_reason"] = "interviewer_closed"' in src

@@ -1076,7 +1076,10 @@ async def respond(request: RespondRequest):
     # Check if max questions reached
     if interview["questions_asked"] >= interview["max_questions"]:
         interview["status"] = "completed"
+        # Out of turns. That is not the same as having established the
+        # competencies, and no report may read as though it were.
         interview["current_stage"] = "completed"
+        interview["end_reason"] = "turn_budget_exhausted"
         interview["end_time"] = datetime.now().isoformat()
         
         name = interview.get("candidate_name", "there").split()[0]
@@ -1133,6 +1136,24 @@ async def respond(request: RespondRequest):
         depth_reached = 0
 
     comp = ai_response.get("competency") or {}
+
+    # A good answer to a different question is not evidence for this one. One
+    # candidate answered a distributed rate-limiting question with PostgreSQL
+    # idempotency - real knowledge, wrong competency - and the engine let it
+    # count as progress. Credit what was actually evidenced; leave what was
+    # asked about unproven.
+    addressed = ai_response.get("answer_addresses_the_question")
+    evidenced = (ai_response.get("competency_actually_evidenced") or "").strip()
+    if addressed is False and isinstance(comp, dict) and comp.get("name"):
+        comp = dict(comp)
+        if evidenced and evidenced.lower() != comp["name"].strip().lower():
+            print("↔ evidence redirected: asked %s, evidenced %s"
+                  % (comp["name"], evidenced))
+            comp["status"] = "unproven"
+            comp["note"] = ("answered about %s instead; nothing established here"
+                            % evidenced[:60])
+        elif comp.get("status") == "confirmed":
+            comp["status"] = "unproven"
 
     # Confirmed means evidence, and evidence starts at the concrete rung. A
     # model that has only heard a description will still call it confirmed, so
@@ -1227,7 +1248,9 @@ async def respond(request: RespondRequest):
     # Check if interview should end
     if decision == "close" or next_stage == "completed":
         interview["status"] = "completed"
+        # The interviewer judged there was no more value in continuing.
         interview["current_stage"] = "completed"
+        interview["end_reason"] = "interviewer_closed"
         interview["end_time"] = datetime.now().isoformat()
         
         interview["conversation_history"].append({

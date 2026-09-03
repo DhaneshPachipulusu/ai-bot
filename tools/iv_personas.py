@@ -4,6 +4,8 @@ Answers are keyed by topic so the simulated candidate responds to what was
 actually asked, without spending API calls on a second model driving them.
 """
 
+import re
+
 
 # What a real candidate says once they have genuinely covered their material,
 # rather than mechanically repeating an earlier answer. Reusing a bank entry
@@ -18,19 +20,48 @@ EXHAUSTED = [
 ]
 
 
-def pick(bank, question, used, allow_reuse=False):
-    """Pick the unused answer whose keywords best match the question.
+def question_part(message):
+    """The actual question, not the preamble.
 
-    Used answers are not returned at all unless allow_reuse is set. Once the
-    bank is exhausted the candidate says so in plain language, which is what a
-    real person does and what the engine should be scored against.
+    An interviewer turn is mostly context - "Got it. Since you mentioned
+    TestContainers and spinning up real PostgreSQL in Docker for your
+    repository tests, how did you handle cleaning up state between runs?"
+    Keyword-matching the whole message scores on "postgres", "docker" and
+    "testcontainers" and returns the Postgres answer, when the question was
+    about test cleanup. Match on the last sentence instead.
     """
-    q = (question or "").lower()
+    text = (message or "").strip()
+    parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if not parts:
+        return text.lower()
+    for part in reversed(parts):
+        if "?" in part:
+            return part.lower()
+    return parts[-1].lower()
 
-    # A strongly matching answer is reused even if already given: asked about
-    # Docker twice, a real candidate repeats their Docker answer rather than
-    # switching to HashMaps. Weak matches skip used entries so the persona
-    # does not repeat itself for no reason.
+
+# Below this, no bank answer is a real reply to the question. Answering anyway
+# is what made a good question score worse than a shallow one.
+MIN_MATCH = 2
+
+NO_EXAMPLE = [
+    "hmm, i dont have a good example for that one",
+    "sorry, i havent had to deal with that specifically",
+    "i'd be guessing on that, so i'd rather not make something up",
+    "thats not something i've done, honestly",
+]
+
+
+def pick(bank, question, used, allow_reuse=False):
+    """Answer the question that was actually asked, or admit there is no answer.
+
+    Scores only the final question sentence. A strongly matching answer may be
+    repeated - asked about Docker twice, a real candidate gives their Docker
+    answer twice - but a weak match is never used as a stand-in, because that
+    turns the engine's repetition detector into a measurement of this file.
+    """
+    q = question_part(question)
+
     best, best_score = None, 0
     for key, (kws, _text) in bank.items():
         score = sum(2 for k in kws if k in q)
@@ -39,17 +70,10 @@ def pick(bank, question, used, allow_reuse=False):
         if score > best_score:
             best, best_score = key, score
 
-    if best is None:
-        remaining = [k for k in bank if k not in used]
-        if remaining:
-            best = remaining[0]
-        else:
-            # `used` stops growing once the bank is empty, so track exhaustion
-            # separately or every remaining turn returns the same sentence -
-            # which would trip the repetition detector all over again.
-            n = sum(1 for k in used if str(k).startswith("__spent"))
-            used.add("__spent%d" % n)
-            return EXHAUSTED[n % len(EXHAUSTED)]
+    if best is None or best_score < MIN_MATCH:
+        n = sum(1 for k in used if str(k).startswith("__none"))
+        used.add("__none%d" % n)
+        return NO_EXAMPLE[n % len(NO_EXAMPLE)]
 
     used.add(best)
     return bank[best][1]
@@ -73,7 +97,9 @@ STRONG = {
         "i keep an idempotency key which is the gateway event id, with a unique index on it "
         "in postgres. on insert conflict i return the existing refund instead of creating a "
         "second one. so a duplicate webhook becomes a no-op rather than a double refund"),
-    "tradeoff": (["trade-off", "tradeoff", "downside", "why did you choose", "alternative"],
+    "tradeoff": (["trade-off", "tradeoff", "downside", "why did you choose", "alternative",
+                 "what made you choose", "rather than", "instead of", "why that",
+                 "what did it cost", "would you change", "do differently"],
         "the unique index makes the write path slower and couples me to postgres. redis "
         "would be faster but if redis loses the key i double refund someone real money, so "
         "i chose durability over latency"),
@@ -94,14 +120,17 @@ STRONG = {
         "i containerised the refunds service. multi stage build, maven in the first stage, "
         "then just the jar on a jre base so the image is smaller. the db is not in the "
         "container, it is a managed instance, containers should be disposable"),
-    "fail": (["went wrong", "failure", "bug", "hardest", "debug", "issue"],
+    "fail": (["went wrong", "failure", "bug", "hardest", "debug", "issue",
+             "what happened when", "broke", "how did you find out", "incident"],
         "we double refunded about forty users in staging. the gateway retried and my unique "
         "index wasnt there yet. the ledger reconciliation flagged the mismatch. that is why "
         "the idempotency key exists"),
-    "test": (["test", "testing", "junit", "mock"],
+    "test": (["test", "testing", "junit", "mock", "coverage", "cleaning up",
+             "between test runs", "test suite"],
         "junit and testcontainers, it spins a real postgres in docker for the repository "
         "tests. i specifically test the duplicate webhook case because that one costs money"),
-    "scale": (["scale", "load", "performance", "concurrent", "bottleneck"],
+    "scale": (["scale", "load", "performance", "concurrent", "bottleneck",
+              "multiple instances", "across servers", "throughput"],
         "about two hundred refunds a minute at peak. the bottleneck was the gateway call "
         "not my service, so i moved it to a queue and the api returns accepted immediately"),
     "behav": (["disagree", "team", "conflict", "difficult", "pressure", "deadline"],

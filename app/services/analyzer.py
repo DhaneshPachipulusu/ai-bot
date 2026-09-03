@@ -317,6 +317,19 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
         return f"{name} - claimed but not substantiated. {note}".strip()
 
     improvements = [phrase(k, note) for k, note in gaps[:5]]
+    # A competency left partial because the interview ran out of turns is not
+    # the same finding as one left partial because the answer was thin, and a
+    # candidate should not read the first as though it were the second.
+    under_probed = [k for k, v in scored.items()
+                    if v.get("status") == "partial"
+                    and any(w in (v.get("note") or "").lower() for w in
+                            ("not asked", "did not ask", "no further", "ran out",
+                             "not probed", "insufficient probing", "but did not answer"))]
+    if under_probed:
+        improvements.append(
+            "Not fully explored before time ran out: " + ", ".join(under_probed[:3])
+            + ". These are gaps in the interview, not necessarily in you.")
+
     if confidence < 1.0:
         improvements.append(
             "Only %d technical area%s could be assessed in this interview, so "
@@ -335,12 +348,25 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
             "you have not worked with yet, and you said so directly rather than "
             "bluffing. Interviewers respect that. Build one small project in "
             "each and you can answer them properly next time."))
-    elif unproven and unproven >= confirmed:
-        improvements.insert(0, (
-            f"{claimed_gaps or unproven} of {assessed} areas probed could not be backed up with "
-            "specifics. Prepare a concrete example - what you personally built, "
-            "how it worked, and what you would change - for every skill on your "
-            "resume."))
+    elif unproven or partial or no_exp:
+        # The summary must use the ledger's own words. "1 of 6 areas could not
+        # be backed up" over a ledger holding one unproven, three partials and
+        # one openly-declared gap tells the candidate something the table
+        # directly below it contradicts.
+        bits = []
+        if claimed_gaps:
+            bits.append("%d could not be backed up with specifics" % claimed_gaps)
+        if partial:
+            bits.append("%d were only partly established" % partial)
+        if no_exp or honest_gaps:
+            bits.append("%d you openly said you have not used yet"
+                        % (no_exp + honest_gaps))
+        if bits:
+            improvements.insert(0, (
+                "Of %d areas probed: %s. For the first group, prepare a "
+                "concrete example - what you personally built, how it worked, "
+                "and what you would change."
+                % (assessed, "; ".join(bits))))
     # Once a ledger exists it is the only honest source of strengths. The
     # length/keyword heuristic otherwise credits a candidate who established
     # nothing with "uses specific technical terms".

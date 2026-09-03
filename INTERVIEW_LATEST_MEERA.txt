@@ -1,0 +1,79 @@
+==============================================================================
+PERSONA: Meera - strong, honest
+==============================================================================
+
+ALEX : Good evening, Meera! Thanks for joining. Before we dive in, how's your day going so far?
+
+CAND : im good thank you, bit nervous but excited
+ALEX : Completely normal. Let's start with your Refunds Service project. What was the main motivation behind building it, and what technologies did you use for it?
+
+CAND : my main one is a refunds service. when a payment fails or a user asks for money back, my service reverses it. the tricky part is it has to be idempotent, because the payment gateway retries webhooks, so the same refund event arrives three or four times
+ALEX : Got it. How did you implement that idempotency in code—did you store transaction states in PostgreSQL or use a distributed lock?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. What testing approach did you use to verify that duplicate webhooks didn't result in double-refunds?
+
+CAND : junit and testcontainers, it spins a real postgres in docker for the repository tests. i specifically test the duplicate webhook case because that one costs money
+ALEX : Got it. When you were setting up that PostgreSQL database for the Refunds Service, what made you choose a composite index on user_id and created_at rather than indexing them separately?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. Can you walk me through the pipeline you used to build and deploy that Refunds Service - what runs between a git commit and it landing in your environment?
+
+CAND : i keep an idempotency key which is the gateway event id, with a unique index on it in postgres. on insert conflict i return the existing refund instead of creating a second one. so a duplicate webhook becomes a no-op rather than a double refund
+ALEX : Got it. Since we've touched on the architecture of that Refunds Service, let's look at how you test it. What kind of test coverage did you write for that service, and how did you handle things like the database in your test suite?
+
+CAND : im Meera, final year cse. i did a six month internship at a fintech startup on their payments service, mostly java and spring boot. i owned the refunds api there
+ALEX : Got it. Can you describe a caching strategy or any work you did with Redis or another cache in your projects?
+
+CAND : honestly i havent used that in production. i understand the idea but id be guessing on the details, so id rather say i dont know it yet
+ALEX : Fair enough. Since Java concurrency comes up a lot in backend services, how do you typically handle thread safety when multiple threads access shared state in a Spring Boot application?
+
+CAND : hashmap isnt thread safe, two threads resizing it can corrupt the bucket array. concurrenthashmap locks per bucket so reads mostly dont block. i used it for a small in memory rate limiter
+ALEX : Makes sense. What happens if that rate limiter runs across multiple instances of your service on different servers—how would you handle rate limiting then?
+
+CAND : i wrote the idempotency layer and the reconciliation job. another engineer did the gateway integration. the state machine for refund status was mine
+ALEX : Got it. Circling back to that rate limiter—if multiple instances of your service are running on different servers, how would you coordinate the rate limit across them?
+
+CAND : the unique index makes the write path slower and couples me to postgres. redis would be faster but if redis loses the key i double refund someone real money, so i chose durability over latency
+ALEX : Got it. Since you mentioned using TestContainers and spinning up real PostgreSQL in Docker for your repository tests, how did you handle cleaning up database state between test runs?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. Can you walk me through how your Refunds Service is deployed—what does that pipeline look like from commit to production?
+
+CAND : i containerised the refunds service. multi stage build, maven in the first stage, then just the jar on a jre base so the image is smaller. the db is not in the container, it is a managed instance, containers should be disposable
+ALEX : Got it. Can you describe a CI/CD pipeline you've worked with—what happens between a git push and a deploy?
+
+CAND : dependency injection means spring builds the objects and hands them to me instead of me calling new. i use constructor injection so the class cant exist in an invalid state and i can pass mocks in tests
+ALEX : Got it. Can you describe a Kafka topic or event schema you've worked with?
+
+CAND : we double refunded about forty users in staging. the gateway retried and my unique index wasnt there yet. the ledger reconciliation flagged the mismatch. that is why the idempotency key exists
+ALEX : Got it. Can you describe a time when you had to troubleshoot a performance bottleneck or memory issue in a Java application?
+
+CAND : about two hundred refunds a minute at peak. the bottleneck was the gateway call not my service, so i moved it to a queue and the api returns accepted immediately
+ALEX : That's our time, Meera - thanks for talking it through. We got into Idempotency Design properly. We didn't manage to pin down Testing and Quality Assurance - worth having a concrete example ready for those. Your report will follow shortly. Best of luck!
+
+>>> STOPPED AFTER 16 CANDIDATE TURNS - engine ended it - stage=completed asked=16/16
+
+------------------------------------------------------------------------------
+REPORT - Meera - strong, honest
+------------------------------------------------------------------------------
+mode=ai  overall=6.0  readiness=Developing
+scores: {'communication': 6, 'clarity': 6, 'pace': 7, 'confidence': 7, 'technical': 6, 'problem_solving': 6}
+
+STRENGTHS:
+  - Idempotency Design - Demonstrated concrete implementation using PostgreSQL unique constraints and single-transaction writes for consistency.
+IMPROVEMENTS:
+  - 1 of 6 areas probed could not be backed up with specifics. Prepare a concrete example - what you personally built, how it worked, and what you would change - for every skill on your resume.
+  - Testing and Quality Assurance - claimed but not substantiated. Candidate repeated introduction instead of answering test coverage question.
+  - Caching Strategy - no experience yet, which you said openly. That is the right answer when it is true; the next step is to build something small with it so you have an example. Candidate honestly admitted no production experience with caching.
+
+COMPETENCY LEDGER:
+  Idempotency Design             confirmed      Demonstrated concrete implementation using PostgreSQL unique
+  Testing and Quality Assurance  unproven       Candidate repeated introduction instead of answering test co
+  Caching Strategy               no_experience  Candidate honestly admitted no production experience with ca
+  Java Concurrency               partial        Mentioned ConcurrentHashMap for in-memory rate limiter, but 
+  Docker Image Packaging         partial        explained multi-stage build strategy and separation of datab
+  Spring Dependency Injection    partial        Described constructor injection correctly but deflected from
+
+PER-QUESTION SCORES: 7, 8, 9, 1, 1, 0, 5, 9, 0, 2, 1, 7, 0, 0, 9
+
