@@ -44,15 +44,33 @@ def question_part(message):
 # is what made a good question score worse than a shallow one.
 MIN_MATCH = 2
 
-NO_EXAMPLE = [
-    "hmm, i dont have a good example for that one",
-    "sorry, i havent had to deal with that specifically",
-    "i'd be guessing on that, so i'd rather not make something up",
-    "thats not something i've done, honestly",
-]
+# What each persona does when the bank has no answer. This matters: a single
+# honest "I don't have an example" made the overclaimer collect four
+# no_experience entries and look candid, when the whole point of him is that
+# he bluffs. The decline has to be in character.
+NO_EXAMPLE = {
+    "honest": [
+        "hmm, i dont have a good example for that one",
+        "sorry, i havent had to deal with that specifically",
+        "id be guessing on that, so id rather not make something up",
+        "thats not something ive done, honestly",
+    ],
+    "bluff": [
+        "yeah thats standard stuff sir, we followed all the best practices there",
+        "we handled that as part of the architecture, it was very scalable",
+        "i was leading that part so i took care of it end to end",
+        "that is a common industry pattern, we implemented it properly",
+    ],
+    "timid": [
+        "um. sorry sir i dont know",
+        "i havent learned that yet",
+        "sorry i dont remember that properly",
+        "that one i havent done sir",
+    ],
+}
 
 
-def pick(bank, question, used, allow_reuse=False):
+def pick(bank, question, used, allow_reuse=False, style="honest"):
     """Answer the question that was actually asked, or admit there is no answer.
 
     Scores only the final question sentence. A strongly matching answer may be
@@ -71,9 +89,10 @@ def pick(bank, question, used, allow_reuse=False):
             best, best_score = key, score
 
     if best is None or best_score < MIN_MATCH:
+        pool = NO_EXAMPLE.get(style, NO_EXAMPLE["honest"])
         n = sum(1 for k in used if str(k).startswith("__none"))
         used.add("__none%d" % n)
-        return NO_EXAMPLE[n % len(NO_EXAMPLE)]
+        return pool[n % len(pool)]
 
     used.add(best)
     return bank[best][1]
@@ -244,6 +263,13 @@ RAMBLER = {
     "goal": (["five years", "career", "goal", "future", "strength", "strong"],
         "in five years i want to become senior java developer and learn aws cloud because "
         "everywhere it is required"),
+}
+
+PERSONA_STYLE = {
+    "Meera Krishnan": "honest",
+    "Arjun Reddy": "bluff",
+    "Kavya Sree": "timid",
+    "Ravi Teja": "bluff",
 }
 
 PERSONAS = [

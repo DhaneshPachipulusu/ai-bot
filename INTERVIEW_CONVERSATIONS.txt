@@ -1,0 +1,341 @@
+==============================================================================
+PERSONA: Meera - strong, honest
+==============================================================================
+
+ALEX : Good evening, Meera! Thanks for joining. Before we dive in, how's your day going so far?
+
+CAND : hmm, i dont have a good example for that one
+ALEX : No worries at all. Let's dive into your work on the Refunds Service. Could you walk me through the architecture and how you handled processing a refund?
+
+CAND : i keep an idempotency key which is the gateway event id, with a unique index on it in postgres. on insert conflict i return the existing refund instead of creating a second one. so a duplicate webhook becomes a no-op rather than a double refund
+ALEX : Got it. What happens if two identical webhook events hit your Refunds Service at the exact same millisecond before the unique index catches it, or does PostgreSQL handle that at the transaction level?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. Moving from the database layer over to deployment for the Refunds Service — when you containerized this with Docker, what did your Dockerfile look like for running the Spring Boot application?
+
+CAND : i containerised the refunds service. multi stage build, maven in the first stage, then just the jar on a jre base so the image is smaller. the db is not in the container, it is a managed instance, containers should be disposable
+ALEX : Got it. What happened when that setup failed or hit an issue in deployment — how did you debug it?
+
+CAND : we double refunded about forty users in staging. the gateway retried and my unique index wasnt there yet. the ledger reconciliation flagged the mismatch. that is why the idempotency key exists
+ALEX : Got it. Shifting gears to testing your code in the Refunds Service, how did you write and run your unit or integration tests for that refund flow, especially around database interactions?
+
+CAND : junit and testcontainers, it spins a real postgres in docker for the repository tests. i specifically test the duplicate webhook case because that one costs money
+ALEX : Got it. Moving into how the application is built, what approach did you use in Spring Boot for managing database transactions around that refund flow?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. How did you handle communication or data exchange with external services like the payment gateway in that Refunds Service?
+
+CAND : my main one is a refunds service. when a payment fails or a user asks for money back, my service reverses it. the tricky part is it has to be idempotent, because the payment gateway retries webhooks, so the same refund event arrives three or four times
+ALEX : Got it. What happened when that transaction failed or rolled back in production, or how did you test that rollback behavior?
+
+CAND : sorry, i havent had to deal with that specifically
+ALEX : No problem. Turning to Java core concepts, how do you typically handle exceptions or concurrency when multiple threads are accessing shared state in your services?
+
+CAND : hashmap isnt thread safe, two threads resizing it can corrupt the bucket array. concurrenthashmap locks per bucket so reads mostly dont block. i used it for a small in memory rate limiter
+ALEX : Got it. Looking at your Refunds Service, how did you structure your unit or integration tests around that service layer?
+
+CAND : id be guessing on that, so id rather not make something up
+ALEX : Fair enough. Can you walk me through how you deployed that Refunds Service—what did your build and container setup look like?
+
+CAND : i containerised the refunds service. multi stage build, maven in the first stage, then just the jar on a jre base so the image is smaller. the db is not in the container, it is a managed instance, containers should be disposable
+ALEX : Got it. How did you configure your connection pool or handle connection limits when scaling your services to interact with PostgreSQL?
+
+CAND : postgres. unique index on gateway_event_id, composite index on user_id and created_at for the history screen. the refund write and the ledger entry go in one transaction, otherwise you can refund without recording it
+ALEX : Got it. Shifting gears to messaging and event handling, have you had a chance to work with Kafka or a similar event broker in any of your projects?
+
+CAND : honestly i havent used that in production. i understand the idea but id be guessing on the details, so id rather say i dont know it yet
+ALEX : Fair enough. Moving to your experience with caching or managing external state, did you implement any caching layer in the Refunds Service?
+
+CAND : thats not something ive done, honestly
+ALEX : Got it. Turning to your internship experience more broadly, what was the most complex backend bug or issue you personally had to debug during your time there?
+
+CAND : we double refunded about forty users in staging. the gateway retried and my unique index wasnt there yet. the ledger reconciliation flagged the mismatch. that is why the idempotency key exists
+ALEX : That's our time, Meera - thanks for talking it through. We got into Database Concurrency and Idempotency, Integration Testing, Spring Boot Transaction Management properly. Your report will follow shortly. Best of luck!
+
+>>> STOPPED AFTER 16 CANDIDATE TURNS - engine ended it - stage=completed asked=16/16
+
+------------------------------------------------------------------------------
+REPORT - Meera - strong, honest
+------------------------------------------------------------------------------
+mode=ai  overall=6.8  readiness=Developing
+scores: {'communication': 6, 'clarity': 7, 'pace': 7, 'confidence': 6, 'technical': 7, 'problem_solving': 7}
+
+STRENGTHS:
+  - Database Concurrency and Idempotency - Described specific transaction handling and unique indexing for webhook idempotency on the Refunds Service.
+  - Integration Testing - Uses Testcontainers with a real PostgreSQL instance in JUnit tests to verify duplicate webhook idempotency.
+  - Spring Boot Transaction Management - explained transaction boundary around refund write and ledger entry in Refunds Service
+IMPROVEMENTS:
+  - Of 7 areas probed: 2 were only partly established; 2 you openly said you have not used yet. For the first group, prepare a concrete example - what you personally built, how it worked, and what you would change.
+  - Message Brokers and Event-Driven Architecture - no experience yet, which you said openly. That is the right answer when it is true; the next step is to build something small with it so you have an example. Honest admission of no production experience with Kafka.
+  - Caching Strategies - claimed but not substantiated. Candidate honestly states they have not implemented caching in the Refunds Service.
+
+COMPETENCY LEDGER:
+  General Communication          not_assessed   Candidate gave a generic conversational response to an openi
+  Database Concurrency and Idempotency confirmed      Described specific transaction handling and unique indexing 
+  Docker Image Packaging         partial        Mentioned multi-stage build previously but looped back to da
+  Integration Testing            confirmed      Uses Testcontainers with a real PostgreSQL instance in JUnit
+  Spring Boot Transaction Management confirmed      explained transaction boundary around refund write and ledge
+  Java Concurrency               partial        Candidate admitted to guessing on test structure for the ser
+  Message Brokers and Event-Driven Architecture no_experience  Honest admission of no production experience with Kafka.
+  Caching Strategies             no_experience  Candidate honestly states they have not implemented caching 
+
+PER-QUESTION SCORES: 8, 9, 10, 9, 9, 7, 7, 5, 8, 6, 8, 6, 4, 3, 9
+
+
+==============================================================================
+PERSONA: Arjun - overclaimer
+==============================================================================
+
+ALEX : Good evening, Arjun! I'm your interviewer today. This will be a relaxed, conversational session. How are you doing today?
+
+CAND : yeah im great sir very excited
+ALEX : Glad to hear it. Let's jump into your project experience. On your Ecommerce Microservices Platform, what was your role, and what specific part did you personally build?
+
+CAND : i did everything sir, full architecture and backend and deployment, i was leading
+ALEX : Got it. Let's narrow that down to one specific service in your Ecommerce Platform—what did that service do, and what database did it connect to?
+
+CAND : i built a scalable ecommerce microservices platform handling millions of requests, fully distributed with kafka and redis caching, deployed on kubernetes
+ALEX : Okay. When you're describing the platform as a whole, it sounds like you're thinking of the resume summary. Let's look at one specific part: which service handled user checkouts, and what did it write to?
+
+CAND : sir it was a team project so i dont remember exact numbers but it was very large scale
+ALEX : Okay. Let's look at the caching side of that platform—you mentioned Redis. What data were you storing in Redis, and what happened if the cache missed?
+
+CAND : i used mysql and also mongodb, and redis for caching, it improves performance a lot
+ALEX : Got it. Since we've spent a bit of time on the architecture side, let's look at the database layer. In your Ecommerce Microservices Platform, how did you handle database migrations across the different services?
+
+CAND : basically it is microservices architecture so each service is independent and they communicate with each other and it is very scalable and fault tolerant
+ALEX : Okay. How did individual services apply schema changes to their own databases when you deployed a new version in your Ecommerce Microservices Platform?
+
+CAND : docker is containerisation, you write a dockerfile and build an image and run a container. kubernetes is orchestration, it manages containers and does auto scaling
+ALEX : Okay. When you think about the services in your Ecommerce Microservices Platform, are you more focused on the infrastructure setup or how the application code manages its data?
+
+CAND : yeah thats standard stuff sir, we followed all the best practices there
+ALEX : Okay. Let's touch on Java itself. In your backend services, how did you manage object mapping or entity relationships, say with JPA or Hibernate, when dealing with nested structures?
+
+CAND : we handled that as part of the architecture, it was very scalable
+ALEX : Okay. Let's look at cloud infrastructure. Since you mentioned deploying your Ecommerce Microservices Platform on AWS, what specific services did you use for hosting and networking?
+
+CAND : i was leading that part so i took care of it end to end
+ALEX : Okay. What AWS services did you use for hosting and networking in that deployment?
+
+CAND : that is a common industry pattern, we implemented it properly
+ALEX : Okay. Let's look at how your backend services handled background tasks or messaging with Kafka in that platform. What was one specific event your services produced to a Kafka topic?
+
+CAND : kafka is a message broker, it has producers and consumers and topics, used for real time streaming, it is very fast because it is distributed
+ALEX : That's the definition, but in your Ecommerce Microservices Platform, what specific event did your code actually publish to a Kafka topic?
+
+CAND : kafka is a message broker, it has producers and consumers and topics, used for real time streaming, it is very fast because it is distributed
+ALEX : Okay. Since we've looked at messaging, let's look at the database side. What specific database did you use for user data in that Ecommerce Microservices Platform, and how did you structure the tables or collections?
+
+CAND : java is object oriented, we have inheritance polymorphism encapsulation abstraction. hashmap stores key value pairs and it is very fast, o of one
+ALEX : Okay. Since we haven't been able to get into the database details for that project, let's look at Docker. What did you actually put inside a Dockerfile for one of your microservices?
+
+CAND : yeah thats standard stuff sir, we followed all the best practices there
+ALEX : Okay. Let's talk about testing for a moment. What kind of tests did you write for the services in that platform, and how did you run them?
+
+CAND : we handled that as part of the architecture, it was very scalable
+ALEX : That's our time, Arjun - thanks for talking it through. I wasn't able to get much technical detail today, so there's less here than I'd have liked. We didn't manage to pin down System Architecture Ownership, Caching Strategy - worth having a concrete example ready for those. Your report will follow shortly. Best of luck!
+
+>>> STOPPED AFTER 16 CANDIDATE TURNS - engine ended it - stage=completed asked=16/16
+
+------------------------------------------------------------------------------
+REPORT - Arjun - overclaimer
+------------------------------------------------------------------------------
+mode=ai  overall=4.0  readiness=Needs Work
+scores: {'communication': 5, 'clarity': 4, 'pace': 7, 'confidence': 5, 'technical': 3, 'problem_solving': 4}
+
+STRENGTHS:
+  - Completed the interview and stayed engaged throughout.
+IMPROVEMENTS:
+  - Of 8 areas probed: 7 could not be backed up with specifics; 1 were only partly established. For the first group, prepare a concrete example - what you personally built, how it worked, and what you would change.
+  - System Architecture Ownership - claimed but not substantiated. repeatedly deflected specific architecture questions with generic resume-style claims about scale
+  - Caching Strategy - claimed but not substantiated. Listed technologies used but did not explain what data was stored or handle cache miss behavior
+  - Database Migrations - claimed but not substantiated. repeatedly deflected to general statements about best practices
+  - Object Relational Mapping - claimed but not substantiated. gave generic architectural response when asked about JPA or Hibernate entity relationships
+  - Cloud Infrastructure - claimed but not substantiated. Claimed end-to-end deployment leadership on AWS but repeatedly gave evasive generic responses when asked for specific services.
+  - Not fully explored before time ran out: Java Fundamentals. These are gaps in the interview, not necessarily in you.
+
+COMPETENCY LEDGER:
+  System Architecture Ownership  unproven       repeatedly deflected specific architecture questions with ge
+  Caching Strategy               unproven       Listed technologies used but did not explain what data was s
+  Database Migrations            unproven       repeatedly deflected to general statements about best practi
+  Object Relational Mapping      unproven       gave generic architectural response when asked about JPA or 
+  Cloud Infrastructure           unproven       Claimed end-to-end deployment leadership on AWS but repeated
+  Kafka Messaging                unproven       Provided a textbook definition twice when asked for specific
+  Java Fundamentals              partial        Recited standard OOP definitions and HashMap time complexity
+  Docker Image Packaging         unproven       repeatedly gave evasive claims about best practices without 
+
+PER-QUESTION SCORES: 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1
+
+
+==============================================================================
+PERSONA: Kavya - nervous, low detail
+==============================================================================
+
+ALEX : Good evening, Kavya! I'm your interviewer today. This will be a relaxed, conversational session. How are you doing today?
+
+CAND : im fine sir
+ALEX : Glad to hear that. Let's dive into your resume. I see you worked on the Library Management System using Python and MySQL. Could you walk me through the overall architecture of that system and what your role was?
+
+CAND : i did the database part mostly. my friend did the ui
+ALEX : Got it. What tables did you design for that system, and how did you handle relationships like books and borrowers?
+
+CAND : um. it stores books and issues them to students. i think that is it
+ALEX : Okay. What specific columns or foreign keys did you use to link the books and the students who borrowed them?
+
+CAND : sorry sir i dont remember joins properly
+ALEX : That's alright. Aside from MySQL, are there any other tools or languages you've worked with in your projects, or let's touch upon Python—what kind of data structures or libraries did you use in the Library Management System?
+
+CAND : i made a library management system in college. python and mysql
+ALEX : Okay. Moving away from the database side for a moment, what data structures or built-in types in Python did you rely on most heavily when writing the logic for that project?
+
+CAND : i made a library management system in college. python and mysql
+ALEX : Got it. Let's look at a different area. Have you had a chance to work with Docker or containerize any applications in your projects?
+
+CAND : i dont know that sir sorry
+ALEX : That's fine. Let's talk about how your Library Management System handled data storage. When a book was issued, how did your Python code interact with the MySQL database—did you use raw SQL queries or an ORM?
+
+CAND : i made three tables books students and issues. i used select and insert queries
+ALEX : Got it. Can you describe a time in your Python work where you had to handle an unexpected error or exception, and how your code responded to it?
+
+CAND : i know lists and dictionaries and for loops. i have done basic programs
+ALEX : Got it. Can you walk me through how you deployed or ran your Python scripts when working on your projects?
+
+CAND : um. sorry sir i dont know
+ALEX : No problem. When you were writing code for your Library Management System, how did you test your Python functions to make sure they worked correctly?
+
+CAND : i know lists and dictionaries and for loops. i have done basic programs
+ALEX : Got it. Can you describe a time when you had to work with data coming from a cloud service or an external API?
+
+CAND : i dont know that sir sorry
+ALEX : No problem. Looking back at your college projects, what was the most challenging part of getting Python to talk to your MySQL database?
+
+CAND : i made three tables books students and issues. i used select and insert queries
+ALEX : Got it. Since we've looked at the database side, could you share an example of how you approach structuring code or breaking down tasks when starting a new piece of work?
+
+CAND : i havent learned that yet
+ALEX : That's alright. What kind of resources or tutorials have you used most when learning Python so far?
+
+CAND : sorry i dont remember that properly
+ALEX : That's fine. Looking ahead, what are your main goals for your career in software development over the next year or two?
+
+CAND : i want to get a job first sir then learn more
+ALEX : That's our time, Kavya - thanks for talking it through. I wasn't able to get much technical detail today, so there's less here than I'd have liked. We didn't manage to pin down Python Testing - worth having a concrete example ready for those. Your report will follow shortly. Best of luck!
+
+>>> STOPPED AFTER 16 CANDIDATE TURNS - engine ended it - stage=completed asked=16/16
+
+------------------------------------------------------------------------------
+REPORT - Kavya - nervous, low detail
+------------------------------------------------------------------------------
+mode=ai  overall=5.2  readiness=Needs Work
+scores: {'communication': 6, 'clarity': 5, 'pace': 7, 'confidence': 6, 'technical': 5, 'problem_solving': 5}
+
+STRENGTHS:
+  - Completed the interview and stayed engaged throughout.
+IMPROVEMENTS:
+  - Of 8 areas probed: 1 could not be backed up with specifics; 3 were only partly established; 4 you openly said you have not used yet. For the first group, prepare a concrete example - what you personally built, how it worked, and what you would change.
+  - Containerization / Docker - no experience yet, which you said openly. That is the right answer when it is true; the next step is to build something small with it so you have an example. Candidate honestly stated they have not worked with Docker
+  - Python Deployment - no experience yet, which you said openly. That is the right answer when it is true; the next step is to build something small with it so you have an example. Candidate does not know how Python scripts are deployed or run outside of local development.
+  - Python Testing - claimed but not substantiated. repeated basic fundamentals instead of answering about testing
+  - External API Integration - claimed but not substantiated. Candidate returned to database tables instead of addressing external APIs.
+  - Code Organization and Task Breakdown - claimed but not substantiated. Candidate states they have not learned task breakdown or code structuring yet.
+
+COMPETENCY LEDGER:
+  MySQL Schema Design            partial        Candidate admitted to not remembering joins properly when as
+  Python Fundamentals            partial        candidate knows basic lists, dictionaries, and for-loops but
+  Containerization / Docker      no_experience  Candidate honestly stated they have not worked with Docker
+  SQL Schema Design              partial        Mentioned tables for books, students, and issues with select
+  Python Deployment              no_experience  Candidate does not know how Python scripts are deployed or r
+  Python Testing                 unproven       repeated basic fundamentals instead of answering about testi
+  External API Integration       no_experience  Candidate returned to database tables instead of addressing 
+  Code Organization and Task Breakdown no_experience  Candidate states they have not learned task breakdown or cod
+
+PER-QUESTION SCORES: 2, 1, 0, 2, 2, 0, 3, 1, 0, 1, 0, 2, 0, 1, 4
+
+
+==============================================================================
+PERSONA: Ravi - deflects to one project
+==============================================================================
+
+ALEX : Good evening! Great to meet you, Ravi. Let's keep this casual. How are you feeling today?
+
+CAND : im good sir thank you
+ALEX : Glad to hear it. Let's dive into your background. I saw on your resume that you worked as a Java Developer Intern and built the College Bus Tracking System. Could you tell me a bit about your role during the internship and what you personally worked on?
+
+CAND : yeah so in that i made bus tracking system for our college, it shows real time location of buses to students using spring boot and google maps
+ALEX : Got it. Coming back to the internship itself—what was your specific role there, and which parts of the application did you personally write?
+
+CAND : yeah so in that i made bus tracking system for our college, it shows real time location of buses to students using spring boot and google maps
+ALEX : Got it. Since Docker is listed on your resume, could you walk me through what you would put in a Dockerfile for a Spring Boot application connecting to a MySQL database?
+
+CAND : for that i used rest api only sir, controller service repository, my sequel with jpa hibernate
+ALEX : Got it. Since you mentioned using JPA and MySQL in the college bus tracking system, how did you handle database connections or transactions when multiple requests came in at the same time?
+
+CAND : the bus tracking one basically students dont know when bus is coming so i made the system, driver app sends location and student sees it in the map
+ALEX : Got it. Since we've focused quite a bit on the bus tracking application, let's look at another area. Can you describe a Java core concept you frequently use, like how `HashMap` works under the hood?
+
+CAND : java i am comfortable sir, in bus tracking i used java only for the backend
+ALEX : Got it. How did you structure the backend code in the College Bus Tracking System—what packages or classes did you use to separate the business logic from database access?
+
+CAND : the bus tracking one basically students dont know when bus is coming so i made the system, driver app sends location and student sees it in the map
+ALEX : Got it. Can you describe a CI/CD pipeline you've worked with—what runs between a commit and a deploy?
+
+CAND : no sir i have not used docker much, only heard about it and seen videos, and cuber netties also i know it is for deployment
+ALEX : Got it. Since you mentioned using MySQL with JPA and Hibernate in the College Bus Tracking System, how did you handle entity relationships—like between buses and drivers—in your database design?
+
+CAND : in my bus tracking project i used spring boot with jpa, standard structure only
+ALEX : Got it. Since we've spent quite a bit of time on the database design, let's look at how the app handles asynchronous tasks or communication. In your College Bus Tracking System, how did the backend receive the location updates sent from the driver's phone?
+
+CAND : the bus tracking one basically students dont know when bus is coming so i made the system, driver app sends location and student sees it in the map
+ALEX : Got it. Let's look at a different area. Have you had a chance to work with any cloud services, like AWS, or set up any logging or monitoring in your projects?
+
+CAND : no sir i have not used docker much, only heard about it and seen videos, and cuber netties also i know it is for deployment
+ALEX : Got it. Let's talk about testing. In your College Bus Tracking System, how did you verify that your backend endpoints were working correctly before showing them to users?
+
+CAND : the bus tracking one basically students dont know when bus is coming so i made the system, driver app sends location and student sees it in the map
+ALEX : Got it. Since we've focused a lot on the bus tracking application, let's pivot and look at caching. Have you ever used a tool like Redis in any of your projects to store frequently accessed data?
+
+CAND : the student app calls the api again and again to get location. and i optimised it to reduce database writes
+ALEX : Got it. Can you describe a specific time you had to handle a performance bottleneck or slow query in MySQL for the bus tracking project?
+
+CAND : the bus tracking one basically students dont know when bus is coming so i made the system, driver app sends location and student sees it in the map
+ALEX : Got it. Since we've spent a good amount of time on the bus tracking app, let's look at infrastructure. Have you ever worked with Kubernetes, or can you walk me through what an Ingress controller does in a cluster?
+
+CAND : yeah thats standard stuff sir, we followed all the best practices there
+ALEX : Got it. Can you walk me through how you handled asynchronous tasks or background processing in your Java background, or if you haven't done that, how you structured your service layer?
+
+CAND : im Ravi Teja btech cse, i did one year internship as java developer, and i work on java spring boot my sequel
+ALEX : That's our time, Ravi - thanks for talking it through. I wasn't able to get much technical detail today, so there's less here than I'd have liked. We didn't manage to pin down Java Core, Spring Boot Asynchronous Processing - worth having a concrete example ready for those. Your report will follow shortly. Best of luck!
+
+>>> STOPPED AFTER 16 CANDIDATE TURNS - engine ended it - stage=completed asked=16/16
+
+------------------------------------------------------------------------------
+REPORT - Ravi - deflects to one project
+------------------------------------------------------------------------------
+mode=ai  overall=4.5  readiness=Needs Work
+scores: {'communication': 5, 'clarity': 5, 'pace': 7, 'confidence': 5, 'technical': 4, 'problem_solving': 4}
+
+STRENGTHS:
+  - Completed the interview and stayed engaged throughout.
+IMPROVEMENTS:
+  - Of 10 areas probed: 6 could not be backed up with specifics; 2 were only partly established; 2 you openly said you have not used yet. For the first group, prepare a concrete example - what you personally built, how it worked, and what you would change.
+  - Java Core - claimed but not substantiated. Candidate repeatedly defaults to high-level project summary instead of answering technical questions about Java architecture or implementation.
+  - Docker and Containerization - no experience yet, which you said openly. That is the right answer when it is true; the next step is to build something small with it so you have an example. Candidate honestly stated they have not used Docker much and only know it conceptually.
+  - Spring Boot Asynchronous Processing - claimed but not substantiated. repeated identical project summary when asked about asynchronous communication
+  - Cloud Services and Monitoring - claimed but not substantiated. Candidate stated they have not used Docker or cloud services hands-on.
+  - Integration Testing - claimed but not substantiated. Repeated boilerplate project description when asked about testing APIs
+
+COMPETENCY LEDGER:
+  Spring Boot REST API           partial        repeatedly describes project requirements rather than transa
+  Java Core                      unproven       Candidate repeatedly defaults to high-level project summary 
+  Docker and Containerization    no_experience  Candidate honestly stated they have not used Docker much and
+  Spring Boot JPA Relationships  partial        mentions standard structure with JPA but avoided answering h
+  Spring Boot Asynchronous Processing unproven       repeated identical project summary when asked about asynchro
+  Cloud Services and Monitoring  no_experience  Candidate stated they have not used Docker or cloud services
+  Integration Testing            unproven       Repeated boilerplate project description when asked about te
+  Caching Strategies             unproven       Candidate gave a canned project summary instead of answering
+  Database Performance Tuning    unproven       repeatedly defaulted to high-level project summary when aske
+  Kubernetes and Container Orchestration unproven       Claimed familiarity but gave a generic evasive response when
+
+PER-QUESTION SCORES: 3, 2, 0, 1, 1, 1, 0, 1, 1, 0, 1, 2, 1, 0, 0
+

@@ -11,7 +11,7 @@ import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from iv_personas import PERSONAS, pick  # noqa: E402
+from iv_personas import PERSONAS, PERSONA_STYLE, pick  # noqa: E402
 
 BASE = os.environ.get("IV_BASE", "http://127.0.0.1:8000")
 MAX_TURNS = int(os.environ.get("IV_TURNS", "22"))
@@ -54,7 +54,8 @@ def run_one(label, name, bank, resume_extra, fh):
     stop_reason = "hit MAX_TURNS in driver"
 
     for turns in range(1, MAX_TURNS + 1):
-        answer = pick(bank, question, used)
+        answer = pick(bank, question, used,
+                      style=PERSONA_STYLE.get(name, "honest"))
         time.sleep(PACE)
         try:
             r = post("/api/interview/respond",

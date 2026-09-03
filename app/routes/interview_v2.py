@@ -1142,7 +1142,9 @@ async def respond(request: RespondRequest):
     # idempotency - real knowledge, wrong competency - and the engine let it
     # count as progress. Credit what was actually evidenced; leave what was
     # asked about unproven.
-    addressed = ai_response.get("answer_addresses_the_question")
+    # answered_question is the field the model already fills on every turn.
+    # Adding a second one for the same fact just meant the gate never fired.
+    addressed = ai_response.get("answered_question")
     evidenced = (ai_response.get("competency_actually_evidenced") or "").strip()
     if addressed is False and isinstance(comp, dict) and comp.get("name"):
         comp = dict(comp)
