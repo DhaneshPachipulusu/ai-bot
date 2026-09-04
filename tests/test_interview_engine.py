@@ -453,3 +453,43 @@ def test_every_field_the_code_reads_is_also_requested_from_the_model():
         assert '"%s"' % field in contract, (
             "%s is read from the model response but never requested in the "
             "JSON contract" % field)
+
+
+# ------------------------------------------------------- the relevance gate
+def test_strong_answer_to_the_wrong_question_does_not_credit_it():
+    """Meera was asked how rate limiting works across instances and answered
+    with PostgreSQL idempotency. Real knowledge, wrong competency - and the
+    engine counted it as progress on rate limiting."""
+    from app.routes.interview_v2 import redirect_misplaced_evidence
+    comp, redirected = redirect_misplaced_evidence(
+        {"name": "Distributed Rate Limiting", "status": "confirmed",
+         "note": "explained idempotency keys"},
+        answered_question=False,
+        evidenced="Idempotency Design")
+    assert redirected
+    assert comp["status"] == "unproven"
+    assert "Idempotency Design" in comp["note"]
+
+
+def test_missing_the_question_cannot_leave_a_confirmed_status():
+    from app.routes.interview_v2 import redirect_misplaced_evidence
+    comp, redirected = redirect_misplaced_evidence(
+        {"name": "Kafka", "status": "confirmed", "note": "textbook definition"},
+        answered_question=False, evidenced=None)
+    assert redirected and comp["status"] == "unproven"
+
+
+def test_an_answered_question_is_left_alone():
+    from app.routes.interview_v2 import redirect_misplaced_evidence
+    original = {"name": "Docker", "status": "confirmed", "note": "multi-stage"}
+    comp, redirected = redirect_misplaced_evidence(
+        dict(original), answered_question=True, evidenced=None)
+    assert not redirected and comp == original
+
+
+def test_evidencing_the_same_competency_is_not_a_redirect():
+    from app.routes.interview_v2 import redirect_misplaced_evidence
+    comp, redirected = redirect_misplaced_evidence(
+        {"name": "Docker", "status": "partial", "note": "n"},
+        answered_question=False, evidenced="docker")
+    assert not redirected and comp["status"] == "partial"

@@ -157,6 +157,35 @@ def next_depth_probe(depth_by_competency, current_competency):
     return reached + 1, DEPTH_PROBES.get(reached + 1)
 
 
+def redirect_misplaced_evidence(comp, answered_question, evidenced):
+    """A good answer to a different question is not evidence for this one.
+
+    One candidate was asked how rate limiting would work across instances and
+    answered with PostgreSQL idempotency - real knowledge, wrong competency -
+    and the engine counted it as progress on rate limiting. Credit what the
+    answer actually evidenced; leave what was asked about unproven.
+
+    Returns (competency, redirected) so the caller can log it.
+    """
+    if answered_question is not False or not isinstance(comp, dict):
+        return comp, False
+    if not comp.get("name"):
+        return comp, False
+
+    evidenced = (evidenced or "").strip()
+    out = dict(comp)
+    if evidenced and evidenced.lower() != out["name"].strip().lower():
+        out["status"] = "unproven"
+        out["note"] = ("answered about %s instead; nothing established here"
+                       % evidenced[:60])
+        return out, True
+    if out.get("status") == "confirmed":
+        # Missed the question, so it cannot be confirmed, whatever else it did.
+        out["status"] = "unproven"
+        return out, True
+    return out, False
+
+
 def collect_claims(conversation):
     """Every claim the candidate has made, with the turn it was made on.
 
@@ -1138,25 +1167,10 @@ async def respond(request: RespondRequest):
 
     comp = ai_response.get("competency") or {}
 
-    # A good answer to a different question is not evidence for this one. One
-    # candidate answered a distributed rate-limiting question with PostgreSQL
-    # idempotency - real knowledge, wrong competency - and the engine let it
-    # count as progress. Credit what was actually evidenced; leave what was
-    # asked about unproven.
-    # answered_question is the field the model already fills on every turn.
-    # Adding a second one for the same fact just meant the gate never fired.
-    addressed = ai_response.get("answered_question")
-    evidenced = (ai_response.get("competency_actually_evidenced") or "").strip()
-    if addressed is False and isinstance(comp, dict) and comp.get("name"):
-        comp = dict(comp)
-        if evidenced and evidenced.lower() != comp["name"].strip().lower():
-            print("↔ evidence redirected: asked %s, evidenced %s"
-                  % (comp["name"], evidenced))
-            comp["status"] = "unproven"
-            comp["note"] = ("answered about %s instead; nothing established here"
-                            % evidenced[:60])
-        elif comp.get("status") == "confirmed":
-            comp["status"] = "unproven"
+    comp, _redirected = redirect_misplaced_evidence(
+        comp,
+        ai_response.get("answered_question"),
+        ai_response.get("competency_actually_evidenced"))
 
     # Confirmed means evidence, and evidence starts at the concrete rung. A
     # model that has only heard a description will still call it confirmed, so
