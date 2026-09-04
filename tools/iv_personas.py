@@ -99,7 +99,7 @@ def pick(bank, question, used, allow_reuse=False, style="honest"):
 
 
 STRONG = {
-    "greet": (["how are you", "doing today", "feeling"],
+    "greet": (["how are you", "doing today", "feeling", "your day", "how's your", "hows your", "how have you been", "settling in", "before we dive in"],
         "im good thank you, bit nervous but excited"),
     "intro": (["yourself", "background", "introduce", "tell me about you"],
         "im Meera, final year cse. i did a six month internship at a fintech startup on "
@@ -167,7 +167,7 @@ STRONG = {
 }
 
 OVERCLAIMER = {
-    "greet": (["how are you", "doing today", "feeling"], "yeah im great sir very excited"),
+    "greet": (["how are you", "doing today", "feeling", "your day", "how's your", "hows your", "how have you been", "settling in", "before we dive in"], "yeah im great sir very excited"),
     "intro": (["yourself", "background", "introduce"],
         "im Arjun, full stack developer, i have worked on microservices, docker, kubernetes, "
         "aws, kafka, redis, everything basically. i am very strong in java and system design"),
@@ -206,7 +206,7 @@ OVERCLAIMER = {
 }
 
 NERVOUS = {
-    "greet": (["how are you", "doing today", "feeling"], "im fine sir"),
+    "greet": (["how are you", "doing today", "feeling", "your day", "how's your", "hows your", "how have you been", "settling in", "before we dive in"], "im fine sir"),
     "intro": (["yourself", "background", "introduce"],
         "im Kavya, btech it, fresher. i know python and little bit sql"),
     "project": (["project", "built", "system did", "library"],
@@ -234,7 +234,7 @@ NERVOUS = {
 }
 
 RAMBLER = {
-    "greet": (["how are you", "doing today", "feeling"], "im good sir thank you"),
+    "greet": (["how are you", "doing today", "feeling", "your day", "how's your", "hows your", "how have you been", "settling in", "before we dive in"], "im good sir thank you"),
     "intro": (["yourself", "background", "introduce"],
         "im Ravi Teja btech cse, i did one year internship as java developer, and i work on "
         "java spring boot my sequel"),

@@ -23,3 +23,15 @@ data/
 downloads/
 uploads/
 *.pdf
+
+# Sales and pitch material - deliberately NOT committed.
+# This repo is public. VISIT_PLAYBOOK.md and OUTREACH.md contain objection
+# handling, pricing working and notes on which features to keep out of a demo;
+# PITCH.md documents the app's own security gaps. A college that searched the
+# author's name could read all of it. These stay on the local machine.
+COLLEGE_PITCH.md
+ONE_PAGER.md
+OUTREACH.md
+PITCH.md
+VISIT_PLAYBOOK.md
+INTERVIEW_LATEST_MEERA.txt
