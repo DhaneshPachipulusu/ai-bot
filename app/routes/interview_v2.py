@@ -715,6 +715,7 @@ Return ONLY valid JSON, no markdown fence:
   "depth_reached": "1-6 on the depth ladder: 1 concept, 2 application, 3 personal implementation, 4 concrete detail, 5 failure case, 6 trade-off",
   "answer_quality": "strong | adequate | weak | evasive | off_topic",
   "candidate_level": "beginner | junior | intermediate | strong_intermediate | senior",
+  "competency_actually_evidenced": "if the answer missed the question but demonstrated something else, name that skill here - otherwise null",
   "competency": {{"name": "the SPECIFIC TECHNICAL SKILL this answer gave evidence about", "status": "confirmed | partial | unproven | no_experience | not_assessed", "note": "one line of evidence"}},
   "decision": "follow_up | dig_deeper | challenge | redirect | diagnose | move_on | encourage | close",
   "acknowledgment": "SPOKEN. Neutral bridge, usually two or three words. No praise unless earned. Must NOT restate your evaluation or narrate that you are moving on.",

@@ -434,3 +434,22 @@ def test_running_out_of_turns_is_recorded_as_such():
         encoding="utf-8").read()
     assert 'interview["end_reason"] = "turn_budget_exhausted"' in src
     assert 'interview["end_reason"] = "interviewer_closed"' in src
+
+
+def test_every_field_the_code_reads_is_also_requested_from_the_model():
+    """The relevance gate read competency_actually_evidenced but the JSON
+    contract never asked for it, so it was always empty and the gate fired
+    zero times across three live runs. Same class of bug as reading
+    answer_addresses_the_question while the model filled answered_question."""
+    import re as _re
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "app", "routes", "interview_v2.py"),
+        encoding="utf-8").read()
+    contract = src[src.index("Return ONLY valid JSON"):]
+    contract = contract[:contract.index('}}"""')]
+    for field in _re.findall(r'ai_response\.get\("([a-z_]+)"', src):
+        if field in ("competency",):
+            continue
+        assert '"%s"' % field in contract, (
+            "%s is read from the model response but never requested in the "
+            "JSON contract" % field)
