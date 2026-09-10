@@ -2,22 +2,32 @@
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-An AI interviewer that reads a candidate's resume, conducts an adaptive spoken
-technical interview about their own projects, and produces an evidence-based
-readiness report.
+**Adaptive AI interviewing with evidence-based competency evaluation.**
 
-Built as a full-stack system: FastAPI + Gemini backend, Next.js frontend, and a
-complete deployment path through Docker, Kubernetes, Helm, Terraform and
-Prometheus.
+An AI interviewer that reads a candidate's resume, conducts an adaptive spoken
+technical interview about their own projects, and produces a readiness report
+built from what they could actually demonstrate - not from what they claimed.
+
+Not a prompt wrapper. A deterministic state machine owns competency tracking,
+difficulty, topic coverage, repetition and deflection handling; the model
+handles the conversation and the judgement inside those rails.
+
+`FastAPI` · `Gemini` · `Next.js` · `Docker` · `Kubernetes` · `Helm` ·
+`Terraform` · `Prometheus`
 
 ---
 
 ## 🎥 Demo
 
-> _Recording to be added._ Until then, [`INTERVIEW_CONVERSATIONS.txt`](INTERVIEW_CONVERSATIONS.txt)
-> contains four complete interview transcripts with their scored reports —
-> a strong candidate, an over-claimer, a nervous candidate, and one who deflects
-> every question back to the same project.
+<!-- Replace with the recording once it exists:
+     [![Watch the demo](docs/screenshots/04-report.png)](YOUR_VIDEO_URL) -->
+
+> **Recording in progress.** In the meantime,
+> [`INTERVIEW_CONVERSATIONS.txt`](INTERVIEW_CONVERSATIONS.txt) has four complete
+> interview transcripts with their scored reports - a strong candidate, an
+> over-claimer, a nervous candidate who admits what she does not know, and one
+> who deflects every question back to the same project. Reading those four side
+> by side is the fastest way to see what the interviewer actually does.
 
 ---
 
@@ -340,7 +350,7 @@ Grafana dashboards are provisioned from
 ## 🧪 Testing
 
 ```bash
-pytest tests/ -q          # 57 tests, ~2s, no network
+pytest tests/ -q          # 67 tests, ~4s, no network
 ```
 
 Every test is a regression case for a bug that was originally found by running a
@@ -404,9 +414,23 @@ make up                        # docker compose
 
 ## 📸 Screenshots
 
-> _To be added._ Suggested: resume analysis with ATS score, live interview with
-> the eye-contact indicator, scored report with the competency ledger, admin
-> cohort dashboard.
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/01-dashboard.png" alt="Dashboard - interviews completed, average score, recent sessions"><br><sub><b>Dashboard</b> - practice history and score trend</sub></td>
+<td width="50%"><img src="docs/screenshots/02-interview-setup.png" alt="Session setup - resume upload and configuration"><br><sub><b>Session setup</b> - resume upload, target role, difficulty</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/03-live-interview.png" alt="Interview in progress"><br><sub><b>Live interview</b> - adaptive question with the camera panel</sub></td>
+<td><img src="docs/screenshots/04-report.png" alt="Interview report with scores and readiness"><br><sub><b>Report</b> - six scores, readiness verdict, evidence-based feedback</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/05-report-delivery.png" alt="Delivery panel - eye contact, pace, fillers"><br><sub><b>How you came across</b> - measured delivery, kept out of the score</sub></td>
+<td><img src="docs/screenshots/06-learning-hub.png" alt="Learning hub - branch-wise topics"><br><sub><b>Learning hub</b> - branch-wise preparation material</sub></td>
+</tr>
+</table>
+
+<sub>Images live in [`docs/screenshots/`](docs/screenshots/) - see the guide there
+for the exact filenames.</sub>
 
 ---
 
@@ -471,16 +495,32 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the full deployment guide.
 
 ---
 
-## Known gaps
+## Current limitations
 
-Stated plainly, because they're real:
+This is a working prototype with a production-shaped deployment path, not a
+system that has been operated with real users. Where that matters, it is said
+plainly rather than left for a reader to discover.
 
-- **Passwords are stored in plaintext.** `verify_login` compares raw strings.
-  Needs bcrypt/Argon2 and JWT sessions before any real user data.
-- **Some routes trust a client-supplied `user_id`** rather than deriving it from
-  a verified token.
-- **SQLite + `ReadWriteOnce` PVC** is single-writer — the scaling ceiling.
-  Postgres and Redis are the migration path.
-- **No live deployment.** Validated locally, never run against a real cohort.
-- The eye-contact detection and per-answer timing are captured but not yet
-  used in the report.
+| Area | Where it stands |
+|---|---|
+| **Authentication** | `verify_login` compares passwords as plaintext strings, and several routes take `user_id` as a request parameter rather than deriving it from a verified session. Demo-grade auth; **must be replaced before any real student data.** |
+| **Persistence** | SQLite on a `ReadWriteOnce` volume. Single-writer, so reads scale across replicas and writes do not. This is the ceiling. |
+| **Deployment** | Kubernetes manifests, Helm chart and Terraform are written and validated. No cluster is kept running, and the platform has never been used by a real cohort. |
+| **Test coverage** | 67 offline tests cover the interview engine and scoring. The routes, resume parsing and frontend have none. |
+| **Browser support** | The spoken interview needs Chrome or Edge. Other browsers fall back to typed input. |
+
+## Production roadmap
+
+In the order it would actually be done — security first, because it is a
+correctness bug rather than a feature:
+
+1. **Argon2 password hashing and JWT sessions**, with `user_id` derived
+   server-side on every route
+2. **PostgreSQL** in place of SQLite, removing the single-writer ceiling
+3. **Redis** for interview state, so pods stop needing a shared volume
+4. **Object storage** for resumes and generated PDFs
+5. **Async report generation** via a queue, so the interview stays responsive
+   while scoring happens off the request path
+6. **A live deployment** on the existing Terraform, run with a real cohort
+7. **Behavioural analytics** — the delivery signals are captured and shown per
+   interview; the next step is trend lines across a cohort
