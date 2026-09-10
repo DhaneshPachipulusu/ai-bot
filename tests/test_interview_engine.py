@@ -557,3 +557,36 @@ def test_delivery_never_moves_the_technical_score():
     r = score(ledger)
     assert "pace" not in r["scored_dimensions"]
     assert "confidence" not in r["scored_dimensions"]
+
+
+# --------------------------------------------------- incomplete interviews
+def test_an_abandoned_interview_is_not_given_a_readiness_verdict():
+    """An interview stopped after four questions, with two partial
+    competencies and nothing confirmed, reported "Developing" at 6.0 - the
+    same as a candidate who finished weakly. The confidence weighting pulls a
+    thin ledger back toward the neutral base, so a short interview regresses
+    to the middle whoever gave it."""
+    r = score(led(Docker="partial", Packaging="partial"))
+    assert r["job_readiness"] == "Incomplete"
+    assert any("ended before enough ground" in s for s in r["improvements"])
+
+
+def test_a_full_interview_still_gets_a_real_verdict():
+    r = score(led(A="confirmed", B="partial", C="unproven", D="confirmed"))
+    assert r["job_readiness"] in ("Ready", "Developing", "Needs Work")
+
+
+def test_the_incomplete_notice_is_the_first_thing_read():
+    r = score(led(Docker="partial", Packaging="partial"))
+    assert "ended before enough ground" in r["improvements"][0]
+
+
+def test_readiness_thresholds_have_one_definition():
+    """The report, the AI prompt and the admin dashboard each had their own
+    thresholds, so 7.3 was "Developing" in one place and "Job Ready" in
+    another."""
+    from backend.services.analyzer import readiness_label, READY_AT, DEVELOPING_AT
+    assert readiness_label(READY_AT, assessed=6) == "Ready"
+    assert readiness_label(READY_AT - 0.1, assessed=6) == "Developing"
+    assert readiness_label(DEVELOPING_AT - 0.1, assessed=6) == "Needs Work"
+    assert readiness_label(9.0, assessed=1) == "Incomplete"

@@ -74,6 +74,15 @@ export default function InterviewBox() {
 
   // The hook has existed since the first version and was never called, so the
   // camera analysis it performs never reached the report.
+  /** Begin measuring a new answer. Called when the question finishes, so the
+   *  window covers thinking time and typing as well as speaking. */
+  const startAnswerWindow = useCallback(() => {
+    answerStartedAtRef.current = Date.now();
+    lastSpeechAtRef.current = null;
+    longestPauseRef.current = 0;
+    eyeSamplesRef.current = { looking: 0, total: 0 };
+  }, []);
+
   const { analysis: eyeAnalysis } = useEyeContactDetection({
     videoElement: videoRef.current,
     enabled: cameraOn,
@@ -340,12 +349,11 @@ export default function InterviewBox() {
       // Delivery sampling, piggybacking on the loop that already runs. Eye
       // contact is read from the MediaPipe hook; pauses come from gaps between
       // sounds above the speech threshold.
-      if (listening) {
+      // Sample whenever the candidate is composing an answer, however they
+      // give it. Gating this on `listening` meant a typed answer - or one
+      // where speech recognition never engaged - captured nothing at all.
+      if (answerStartedAtRef.current) {
         const now = Date.now();
-        if (eyeAnalysis?.faceDetected) {
-          eyeSamplesRef.current.total += 1;
-          if (eyeAnalysis.eyeContact) eyeSamplesRef.current.looking += 1;
-        }
         if (level > SOUND_THRESHOLD) {
           if (lastSpeechAtRef.current) {
             const gap = (now - lastSpeechAtRef.current) / 1000;
@@ -643,16 +651,28 @@ export default function InterviewBox() {
     } else {
       listeningRef.current = true;
       setListening(true);
-      answerStartedAtRef.current = Date.now();
-      lastSpeechAtRef.current = null;
-      longestPauseRef.current = 0;
-      eyeSamplesRef.current = { looking: 0, total: 0 };
+      startAnswerWindow();
       setAiState("listening");
       lastSoundTimeRef.current = Date.now();
       try { recognitionRef.current?.start(); } catch { }
       startSilenceDetection();
     }
   };
+
+  // Camera sampling runs on its own timer. It used to sit inside the audio
+  // analyser loop, which only runs when a microphone stream is open - so a
+  // candidate who typed, or who denied the mic, produced zero eye-contact
+  // samples and got no delivery feedback.
+  useEffect(() => {
+    if (!cameraOn) return;
+    const id = setInterval(() => {
+      if (!answerStartedAtRef.current) return;
+      if (!eyeAnalysis?.faceDetected) return;
+      eyeSamplesRef.current.total += 1;
+      if (eyeAnalysis.eyeContact) eyeSamplesRef.current.looking += 1;
+    }, 500);
+    return () => clearInterval(id);
+  }, [cameraOn, eyeAnalysis]);
 
   // ==================== SUBMIT ====================
 
@@ -701,6 +721,11 @@ export default function InterviewBox() {
       setCurrentMessage(response.message);
       setInterviewState(response.state);
       setPerformanceHint(response.performance_hint || null);
+
+      // The next answer starts being measured the moment its question is on
+      // screen. Waiting for the mic meant a typed answer recorded no duration
+      // and no camera samples at all.
+      if (!response.is_complete) startAnswerWindow();
 
       if (response.is_complete) {
         handleComplete(response.message.text);

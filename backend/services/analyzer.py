@@ -191,7 +191,17 @@ READY_AT = 7.5
 DEVELOPING_AT = 5.5
 
 
-def readiness_label(overall: float) -> str:
+# Below this many assessed competencies there is not enough evidence to call
+# a readiness level at all. An interview abandoned after four questions was
+# reporting "Developing" off two partial competencies, because the confidence
+# weighting pulls a thin ledger back toward the neutral heuristic base - so a
+# candidate who stopped halfway scored the same as one who finished weakly.
+MIN_COMPETENCIES_FOR_A_VERDICT = 3
+
+
+def readiness_label(overall: float, assessed: int = None) -> str:
+    if assessed is not None and assessed < MIN_COMPETENCIES_FOR_A_VERDICT:
+        return "Incomplete"
     if overall >= READY_AT:
         return "Ready"
     if overall >= DEVELOPING_AT:
@@ -302,7 +312,7 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     out["observation_only"] = ["pace", "confidence"]
     out["competencies_assessed"] = assessed
     out["competencies"] = ledger
-    out["job_readiness"] = readiness_label(overall)
+    out["job_readiness"] = readiness_label(overall, assessed)
 
     proven = [k for k, v in scored.items() if v.get("status") == "confirmed"]
     gaps = [(k, v.get("note", "")) for k, v in scored.items()
@@ -382,6 +392,16 @@ def apply_competency_evidence(score_block: dict, ledger: dict,
     # Once a ledger exists it is the only honest source of strengths. The
     # length/keyword heuristic otherwise credits a candidate who established
     # nothing with "uses specific technical terms".
+    # Inserted last so it reads first: everything below is qualified by the
+    # interview having stopped early.
+    if assessed < MIN_COMPETENCIES_FOR_A_VERDICT:
+        improvements.insert(0, (
+            "This interview ended before enough ground was covered to judge "
+            "readiness - only %d technical area%s got as far as being assessed. "
+            "The scores describe what was seen, not what you are capable of. "
+            "Run a full interview for a real assessment."
+            % (assessed, "" if assessed == 1 else "s")))
+
     out["strengths"] = strengths or [
         "Completed the interview and stayed engaged throughout."]
     if improvements:

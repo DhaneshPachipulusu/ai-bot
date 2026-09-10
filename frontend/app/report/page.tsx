@@ -60,11 +60,23 @@ interface ReportData {
 const getColor = (s: number) =>
   s >= 7 ? "#22c55e" : s >= 5 ? "#eab308" : "#ef4444";
 
-const getReadinessInfo = (score: number) => {
-  if (score >= 8) return { level: "High", color: "text-green-400", bg: "bg-green-500/15" };
-  if (score >= 6.5) return { level: "Moderate", color: "text-yellow-400", bg: "bg-yellow-500/15" };
-  if (score >= 5) return { level: "Developing", color: "text-orange-400", bg: "bg-orange-500/15" };
-  return { level: "Needs Practice", color: "text-red-400", bg: "bg-red-500/15" };
+/** The backend already decided this from the competency ledger, including
+ *  whether there was enough evidence to call it at all. Recomputing it here
+ *  from the score produced a fourth set of thresholds that disagreed with the
+ *  report, the admin dashboard and each other. Map the label to colour only. */
+const getReadinessInfo = (label?: string) => {
+  switch (label) {
+    case "Ready":
+      return { level: "Ready", color: "text-green-400", bg: "bg-green-500/15" };
+    case "Developing":
+      return { level: "Developing", color: "text-yellow-400", bg: "bg-yellow-500/15" };
+    case "Incomplete":
+      return { level: "Incomplete", color: "text-sky-400", bg: "bg-sky-500/15" };
+    case "Needs Work":
+      return { level: "Needs Work", color: "text-orange-400", bg: "bg-orange-500/15" };
+    default:
+      return { level: label || "Unrated", color: "text-gray-400", bg: "bg-gray-500/15" };
+  }
 };
 
 /* =======================
@@ -449,7 +461,7 @@ export default function ReportPage() {
   const mustImprove = (report.improvements || []).slice(0, 2);
   const shouldImprove = (report.improvements || []).slice(2, 4);
   const advancedImprove = (report.improvements || []).slice(4);
-  const readiness = getReadinessInfo(report.overall_score);
+  const readiness = getReadinessInfo(report.job_readiness);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 sm:p-6 text-white">
