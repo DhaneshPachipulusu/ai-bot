@@ -25,6 +25,22 @@ interface Scores {
   pace: number;
 }
 
+/** Measured presentation signals. Reported beside the score, never inside it:
+ *  a nervous candidate who knows the material keeps their technical score and
+ *  still gets told to fix their eye contact. Every field is optional because a
+ *  candidate with no camera simply has fewer of them. */
+interface Delivery {
+  answers: number;
+  observations: string[];
+  measured: string[];
+  words_per_minute?: number;
+  speaking_seconds?: number;
+  eye_contact_ratio?: number;
+  eye_contact_samples?: number;
+  fillers_per_100_words?: number;
+  longest_pause_seconds?: number;
+}
+
 interface ReportData {
   overall_score: number;
   scores: Scores;
@@ -34,6 +50,7 @@ interface ReportData {
   job_readiness: string;
   analysis_mode?: "ai" | "rule_based";
   qa_feedback: QAFeedback[];
+  delivery?: Delivery;
 }
 
 /* =======================
@@ -298,6 +315,97 @@ function RadarChart({ scores }: { scores: Scores }) {
    Main Page
 ======================= */
 
+/* =======================
+   Delivery - how it was said, not what was said
+======================= */
+
+/** Green when the number is good for a video interview, amber when it is worth
+ *  working on. Deliberately not converted into a score - these are
+ *  observations a student can act on, not a ranking. */
+function DeliveryStat({
+  label, value, hint, good,
+}: { label: string; value: string; hint: string; good: boolean }) {
+  return (
+    <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-700/40">
+      <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">{label}</div>
+      <div className={`text-2xl font-semibold ${good ? "text-emerald-400" : "text-amber-400"}`}>
+        {value}
+      </div>
+      <div className="text-xs text-gray-500 mt-1">{hint}</div>
+    </div>
+  );
+}
+
+function DeliverySection({ delivery }: { delivery: Delivery }) {
+  const stats: { label: string; value: string; hint: string; good: boolean }[] = [];
+
+  if (delivery.eye_contact_ratio !== undefined) {
+    const pct = Math.round(delivery.eye_contact_ratio * 100);
+    stats.push({
+      label: "Eye contact",
+      value: `${pct}%`,
+      hint: `${delivery.eye_contact_samples ?? 0} camera samples`,
+      good: pct >= 65,
+    });
+  }
+  if (delivery.words_per_minute !== undefined) {
+    const wpm = delivery.words_per_minute;
+    stats.push({
+      label: "Speaking pace",
+      value: `${wpm} wpm`,
+      hint: "comfortable is 110-150",
+      good: wpm >= 110 && wpm <= 150,
+    });
+  }
+  if (delivery.fillers_per_100_words !== undefined) {
+    const f = delivery.fillers_per_100_words;
+    stats.push({
+      label: "Filler words",
+      value: `${f}`,
+      hint: "per 100 words",
+      good: f <= 6,
+    });
+  }
+  if (delivery.longest_pause_seconds !== undefined) {
+    stats.push({
+      label: "Longest pause",
+      value: `${delivery.longest_pause_seconds}s`,
+      hint: "mid-answer silence",
+      good: delivery.longest_pause_seconds < 8,
+    });
+  }
+
+  return (
+    <div className="bg-slate-800/40 rounded-2xl border border-slate-700/50 p-5">
+      <div className="flex items-center gap-3 mb-1">
+        <span className="w-2 h-2 rounded-full bg-sky-400" />
+        <h3 className="text-sm font-semibold text-gray-200">How you came across</h3>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        Measured from your camera and microphone. Separate from your technical
+        score - this is presentation, and all of it is fixable with practice.
+      </p>
+
+      {stats.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          {stats.map((st) => (
+            <DeliveryStat key={st.label} {...st} />
+          ))}
+        </div>
+      )}
+
+      <ul className="space-y-2">
+        {delivery.observations.map((o, i) => (
+          <li key={i} className="text-sm text-gray-300 leading-relaxed flex gap-2">
+            <span className="text-sky-400 mt-0.5">-</span>
+            <span>{o}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function ReportPage() {
   const router = useRouter();
   const [report, setReport] = useState<ReportData | null>(null);
@@ -463,6 +571,8 @@ export default function ReportPage() {
           color="green"
           defaultOpen={false}
         />
+
+        {report.delivery && <DeliverySection delivery={report.delivery} />}
 
         {/* Question-by-Question Feedback - Collapsed */}
         <div className="bg-slate-800/40 rounded-2xl border border-slate-700/50">

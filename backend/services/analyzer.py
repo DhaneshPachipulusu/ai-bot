@@ -93,9 +93,17 @@ def analyze_interview(conversation_path: str) -> dict:
     with open(conversation_path, "r") as f:
         data = json.load(f)
 
+    # Delivery is independent of whether any answer was scored. A candidate
+    # whose interview produced no gradable Q&A should still be told how they
+    # came across, not handed an empty report.
+    delivery = summarise_delivery(data.get("conversation_history", []))
+
     qa_pairs = extract_qa(data)
     if not qa_pairs:
-        return fallback_interview("No interview answers found")
+        out = fallback_interview("No interview answers found")
+        if delivery:
+            out["delivery"] = delivery
+        return out
 
     # ---------- Rule-based scores (for charts) ----------
     score_block = rule_interview_scores(qa_pairs)
@@ -148,11 +156,6 @@ def analyze_interview(conversation_path: str) -> dict:
 
     # Remove qa_feedback from ai_block if it exists (we're using merged version)
     ai_block_clean = {k: v for k, v in ai_block.items() if k not in ["qa_feedback", "per_question_feedback"]}
-
-    # Delivery is reported alongside the score, never inside it. A nervous
-    # candidate who knows the material should still score well technically and
-    # still be told they looked away for most of the interview.
-    delivery = summarise_delivery(data.get("conversation_history", []))
 
     merged = {
         **score_block,
