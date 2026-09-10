@@ -155,7 +155,8 @@ generates the language; deterministic code controls the flow. Specifically:
 ### Interview state
 
 The HTTP layer is stateless. Each interview gets a UUID; its full state lives in
-`data/interviews/{id}.json` as a serialised Pydantic `InterviewContext`.
+`data/interviews/{id}.json` - a JSON document holding the resume, the
+conversation, the competency ledger and every claim the candidate has made.
 
 ```
 POST /api/interview/start
@@ -163,7 +164,7 @@ POST /api/interview/start
   ├─ extract probe areas            → skills, projects, gaps
   ├─ calibrate difficulty           → 0-2 yrs easy · 3-5 medium · 6+ hard
   ├─ build topic list
-  └─ persist InterviewContext       → data/interviews/{uuid}.json
+  └─ persist interview state        → data/interviews/{uuid}.json
 
 POST /api/interview/respond         ← called once per candidate answer
   ├─ load context
@@ -218,7 +219,7 @@ heuristics are all that's left.
 ## 🤖 AI workflow
 
 ```
-Resume ──► Gemini parse ──► probe areas ──► InterviewContext
+Resume ──► Gemini parse ──► probe areas ──► interview state
                                                   │
         ┌─────────────────────────────────────────┘
         ▼
@@ -454,12 +455,12 @@ is what moved the bluffing persona below the nervous one who admits gaps.
 ## Project layout
 
 ```
-backend/                  FastAPI backend
-  routes/             HTTP endpoints
-  services/           interview engine, analyzer, resume tooling
+backend/              FastAPI service
+  routes/             HTTP endpoints - interview_v2.py is the live engine
+  services/           analyzer, resume tooling, PDF generation
   prompts/            layer-1 interviewer system prompt
-  models/             Pydantic interview context
-frontend/          Next.js 16 app (15 screens)
+  config.py           single source of env configuration
+frontend/             Next.js 16 app, 15 screens
 tests/                offline regression suite
 tools/                persona-driven behavioural harness
 k8s/ helm/ terraform/ deployment
@@ -481,5 +482,5 @@ Stated plainly, because they're real:
 - **SQLite + `ReadWriteOnce` PVC** is single-writer — the scaling ceiling.
   Postgres and Redis are the migration path.
 - **No live deployment.** Validated locally, never run against a real cohort.
-- Several unused modules remain from earlier iterations (see `git log` for the
-  engine rewrite).
+- The eye-contact detection and per-answer timing are captured but not yet
+  used in the report.
