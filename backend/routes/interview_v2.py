@@ -309,6 +309,10 @@ class RespondRequest(BaseModel):
     user_id: int
     answer: str
     answer_duration_seconds: Optional[int] = None
+    # Measured delivery signals from the browser. Every field is optional: a
+    # candidate with no camera, or on a browser without speech APIs, simply
+    # sends fewer of them and the report says so rather than inventing a score.
+    delivery_metrics: Optional[dict] = None
 
 
 class EndInterviewRequest(BaseModel):
@@ -1100,6 +1104,7 @@ async def respond(request: RespondRequest):
         "text": request.answer,
         "timestamp": datetime.now().isoformat(),
         "duration_seconds": request.answer_duration_seconds,
+        "delivery": request.delivery_metrics or {},
         "stage": interview.get("current_stage", "unknown")
     })
     

@@ -151,11 +151,25 @@ export async function startConversationalInterview(request: {
 /**
  * Send answer and get AI response
  */
+/** Measured delivery signals for one answer. All optional - a candidate with
+ *  no camera, or on a browser without speech APIs, simply sends fewer of them. */
+export interface DeliveryMetrics {
+  /** Wall-clock seconds the candidate actually spent answering. */
+  durationSeconds?: number;
+  /** Share of camera samples where they were looking at the lens, 0-1. */
+  eyeContactRatio?: number;
+  /** Camera samples taken during this answer. Low counts mean low confidence. */
+  eyeContactSamples?: number;
+  /** Longest unbroken pause mid-answer, seconds. */
+  longestPauseSeconds?: number;
+}
+
 export async function respondToInterview(
   interviewId: string,
   userId: number,
   answer: string,
-  answerDurationSeconds?: number
+  answerDurationSeconds?: number,
+  delivery?: DeliveryMetrics
 ): Promise<RespondResponse> {
   const res = await fetch(`${API_URL}/api/interview/respond`, {
     method: "POST",
@@ -165,6 +179,14 @@ export async function respondToInterview(
       user_id: userId,
       answer: answer,
       answer_duration_seconds: answerDurationSeconds,
+      delivery_metrics: delivery
+        ? {
+            duration_seconds: delivery.durationSeconds,
+            eye_contact_ratio: delivery.eyeContactRatio,
+            eye_contact_samples: delivery.eyeContactSamples,
+            longest_pause_seconds: delivery.longestPauseSeconds,
+          }
+        : undefined,
     }),
   });
 

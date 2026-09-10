@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/auth";
+import { useEyeContactDetection } from "@/lib/useEyeContactDetection";
 import {
   startConversationalInterview,
   respondToInterview,
@@ -62,6 +63,22 @@ export default function InterviewBox() {
   // Refs
   const recognitionRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Delivery timing, measured rather than estimated. The duration used to be
+  // answerText.split(" ").length * 0.5, so "pace" was really word count wearing
+  // a different name.
+  const answerStartedAtRef = useRef<number | null>(null);
+  const lastSpeechAtRef = useRef<number | null>(null);
+  const longestPauseRef = useRef<number>(0);
+  const eyeSamplesRef = useRef<{ looking: number; total: number }>({ looking: 0, total: 0 });
+
+  // The hook has existed since the first version and was never called, so the
+  // camera analysis it performs never reached the report.
+  const { analysis: eyeAnalysis } = useEyeContactDetection({
+    videoElement: videoRef.current,
+    enabled: cameraOn,
+    checkInterval: 500,
+  });
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -319,6 +336,24 @@ export default function InterviewBox() {
       const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
       const level = Math.min(100, (avg / 128) * 100);
       setAudioLevel(level);
+
+      // Delivery sampling, piggybacking on the loop that already runs. Eye
+      // contact is read from the MediaPipe hook; pauses come from gaps between
+      // sounds above the speech threshold.
+      if (listening) {
+        const now = Date.now();
+        if (eyeAnalysis?.faceDetected) {
+          eyeSamplesRef.current.total += 1;
+          if (eyeAnalysis.eyeContact) eyeSamplesRef.current.looking += 1;
+        }
+        if (level > SOUND_THRESHOLD) {
+          if (lastSpeechAtRef.current) {
+            const gap = (now - lastSpeechAtRef.current) / 1000;
+            if (gap > longestPauseRef.current) longestPauseRef.current = gap;
+          }
+          lastSpeechAtRef.current = now;
+        }
+      }
 
       // Track last sound time for silence detection
       if (level > SOUND_THRESHOLD && listening) {
@@ -608,6 +643,10 @@ export default function InterviewBox() {
     } else {
       listeningRef.current = true;
       setListening(true);
+      answerStartedAtRef.current = Date.now();
+      lastSpeechAtRef.current = null;
+      longestPauseRef.current = 0;
+      eyeSamplesRef.current = { looking: 0, total: 0 };
       setAiState("listening");
       lastSoundTimeRef.current = Date.now();
       try { recognitionRef.current?.start(); } catch { }
@@ -636,12 +675,28 @@ export default function InterviewBox() {
     setPerformanceHint(null);
 
     try {
+      // Measured, not estimated. The old value was word count times 0.5,
+      // which made "pace" a second reading of answer length.
+      const startedAt = answerStartedAtRef.current;
+      const durationSeconds = startedAt
+        ? Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+        : undefined;
+      const { looking, total } = eyeSamplesRef.current;
+
       const response = await respondToInterview(
         interviewId,
         userId,
         answerText,
-        Math.ceil(answerText.split(" ").length * 0.5)
+        durationSeconds,
+        {
+          durationSeconds,
+          eyeContactRatio: total > 0 ? looking / total : undefined,
+          eyeContactSamples: total,
+          longestPauseSeconds: longestPauseRef.current || undefined,
+        }
       );
+
+      answerStartedAtRef.current = null;
 
       setCurrentMessage(response.message);
       setInterviewState(response.state);

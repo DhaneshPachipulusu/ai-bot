@@ -493,3 +493,67 @@ def test_evidencing_the_same_competency_is_not_a_redirect():
         {"name": "Docker", "status": "partial", "note": "n"},
         answered_question=False, evidenced="docker")
     assert not redirected and comp["status"] == "partial"
+
+
+# ------------------------------------------------------------ delivery
+def _turn(text, **d):
+    return {"role": "candidate", "text": text, "delivery": d}
+
+
+def test_delivery_is_measured_not_derived_from_word_count():
+    """pace and confidence used to come from answer length, so they were a
+    second reading of the same signal and came out identical for every
+    candidate tested. Same words, different speaking time, different pace."""
+    from backend.services.delivery import summarise_delivery
+    words = "one two three four five six seven eight nine ten " * 3
+    fast = summarise_delivery([_turn(words, duration_seconds=6)])
+    slow = summarise_delivery([_turn(words, duration_seconds=60)])
+    assert fast["words_per_minute"] > slow["words_per_minute"] * 3
+
+
+def test_low_eye_contact_is_reported_as_coachable_feedback():
+    from backend.services.delivery import summarise_delivery
+    d = summarise_delivery([
+        _turn("i used postgres with a unique index on the event id",
+              duration_seconds=8, eye_contact_ratio=0.2, eye_contact_samples=20)])
+    assert d["eye_contact_ratio"] == 0.2
+    assert any("looking at the camera" in o for o in d["observations"])
+
+
+def test_too_few_camera_samples_is_declared_not_scored():
+    """A candidate with the camera off must not get a fabricated figure."""
+    from backend.services.delivery import summarise_delivery
+    d = summarise_delivery([
+        _turn("some answer here about databases", duration_seconds=5,
+              eye_contact_ratio=0.1, eye_contact_samples=2)])
+    assert "eye_contact_ratio" not in d
+    assert any("Not enough camera data" in o for o in d["observations"])
+
+
+def test_text_only_interview_reports_no_delivery_section():
+    """No microphone, no camera - report nothing rather than zeroes."""
+    from backend.services.delivery import summarise_delivery
+    assert summarise_delivery([{"role": "candidate", "text": "an answer"}]) is None
+    assert summarise_delivery([]) is None
+
+
+def test_filler_words_are_counted_per_hundred_words():
+    from backend.services.delivery import summarise_delivery
+    clean = summarise_delivery([_turn(
+        "i used a unique index on the gateway event id to make it idempotent",
+        duration_seconds=6)])
+    filled = summarise_delivery([_turn(
+        "um so basically like you know i mean actually um the thing is basically",
+        duration_seconds=6)])
+    assert filled["fillers_per_100_words"] > clean["fillers_per_100_words"]
+
+
+def test_delivery_never_moves_the_technical_score():
+    """The whole point of separating it: a nervous candidate who knows the
+    material scores the same technically as a polished one who knows it."""
+    ledger = led(Idempotency="confirmed", Testing="confirmed",
+                 Docker="confirmed", Concurrency="partial", Cloud="no_experience")
+    assert score(ledger)["scores"]["technical"] == score(ledger)["scores"]["technical"]
+    r = score(ledger)
+    assert "pace" not in r["scored_dimensions"]
+    assert "confidence" not in r["scored_dimensions"]

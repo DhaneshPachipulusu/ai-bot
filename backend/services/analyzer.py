@@ -10,6 +10,8 @@ import os
 import time
 from typing import Optional
 
+from backend.services.delivery import summarise_delivery
+
 # ==========================================
 # AI Setup
 # ==========================================
@@ -147,6 +149,11 @@ def analyze_interview(conversation_path: str) -> dict:
     # Remove qa_feedback from ai_block if it exists (we're using merged version)
     ai_block_clean = {k: v for k, v in ai_block.items() if k not in ["qa_feedback", "per_question_feedback"]}
 
+    # Delivery is reported alongside the score, never inside it. A nervous
+    # candidate who knows the material should still score well technically and
+    # still be told they looked away for most of the interview.
+    delivery = summarise_delivery(data.get("conversation_history", []))
+
     merged = {
         **score_block,
         **ai_block_clean,
@@ -168,6 +175,8 @@ def analyze_interview(conversation_path: str) -> dict:
                   "competencies_assessed", "scored_dimensions"):
             if k in score_block:
                 merged[k] = score_block[k]
+    if delivery:
+        merged["delivery"] = delivery
     return merged
 
 
