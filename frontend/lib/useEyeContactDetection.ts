@@ -56,6 +56,10 @@ export function useEyeContactDetection({ videoElement, enabled = true, checkInte
   // Initialize MediaPipe Face Mesh
   const initializeFaceMesh = useCallback(async () => {
     if (!enabled || !videoElement) return;
+    // Already running. Without this, a re-render that changes the video
+    // element builds a second WASM instance while the first is still live,
+    // and the two fight over the camera.
+    if (faceMeshRef.current) return;
 
     try {
       setIsLoading(true);
@@ -275,18 +279,46 @@ export function useEyeContactDetection({ videoElement, enabled = true, checkInte
     }, checkInterval);
   }, [checkInterval]);
 
-  // Initialize on mount
+  // Initialize on mount.
+  //
+  // React StrictMode runs effects mount -> cleanup -> mount again in
+  // development. MediaPipe's FaceMesh wraps a WASM instance that cannot be
+  // closed twice: the second close threw
+  // "BindingError: SolutionWasm instance already deleted" and took down the
+  // whole page. So the ref is cleared before closing, the close is guarded,
+  // and a stale async init is prevented from attaching after unmount.
   useEffect(() => {
+    let cancelled = false;
+
     if (videoElement && enabled) {
-      initializeFaceMesh();
+      void (async () => {
+        await initializeFaceMesh();
+        if (cancelled && faceMeshRef.current) {
+          // Unmounted while MediaPipe was still loading - tear down whatever
+          // it just built rather than leaving an orphan instance running.
+          const orphan = faceMeshRef.current;
+          faceMeshRef.current = null;
+          try {
+            orphan.close?.();
+          } catch {
+            /* already gone */
+          }
+        }
+      })();
     }
 
     return () => {
+      cancelled = true;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      if (faceMeshRef.current) {
-        faceMeshRef.current.close?.();
+      const instance = faceMeshRef.current;
+      faceMeshRef.current = null;   // clear first, so a second cleanup is a no-op
+      try {
+        instance?.close?.();
+      } catch {
+        // Already deleted. Nothing to do, and it must not reach the page.
       }
     };
   }, [videoElement, enabled, initializeFaceMesh]);
