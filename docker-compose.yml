@@ -18,7 +18,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app:ro
+      - ./backend:/app/backend:ro
       - backend_data:/app/data
       - backend_uploads:/app/uploads
       - backend_downloads:/app/downloads
@@ -33,7 +33,7 @@ services:
 
   frontend:
     build:
-      context: ./ai-frontend
+      context: ./frontend
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8000

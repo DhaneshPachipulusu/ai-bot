@@ -379,13 +379,13 @@ cp .env.example .env          # add GEMINI_API_KEY
 ```bash
 python -m venv .venv && .venv/Scripts/activate     # Windows
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8000
 ```
 
 **Frontend**
 
 ```bash
-cd ai-frontend
+cd frontend
 npm install
 npm run dev                    # http://localhost:3000
 ```
@@ -454,12 +454,12 @@ is what moved the bluffing persona below the nervous one who admits gaps.
 ## Project layout
 
 ```
-app/                  FastAPI backend
+backend/                  FastAPI backend
   routes/             HTTP endpoints
   services/           interview engine, analyzer, resume tooling
   prompts/            layer-1 interviewer system prompt
   models/             Pydantic interview context
-ai-frontend/          Next.js 16 app (15 screens)
+frontend/          Next.js 16 app (15 screens)
 tests/                offline regression suite
 tools/                persona-driven behavioural harness
 k8s/ helm/ terraform/ deployment

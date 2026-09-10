@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
-from app.services.question_generator import generate_role_questions
+from backend.services.question_generator import generate_role_questions
 
 router = APIRouter()
 

@@ -1,5 +1,5 @@
 import json
-from app.config import USE_MOCK_AI, client
+from backend.config import USE_MOCK_AI, client
 
 # ==========================================
 # STANDARD INTERVIEW QUESTIONS

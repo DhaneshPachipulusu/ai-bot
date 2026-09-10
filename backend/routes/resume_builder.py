@@ -15,14 +15,14 @@ import os
 import re
 import json
 
-from app.config import client, USE_MOCK_AI, GEMINI_MODEL
-from app.services.resume_builder import (
+from backend.config import client, USE_MOCK_AI, GEMINI_MODEL
+from backend.services.resume_builder import (
     normalize_to_schema,
     refine_resume,
     calculate_score,
     empty_schema
 )
-from app.services.pdf_generator import generate_resume_pdf, get_resume_filename
+from backend.services.pdf_generator import generate_resume_pdf, get_resume_filename
 
 router = APIRouter()
 

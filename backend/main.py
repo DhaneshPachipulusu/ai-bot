@@ -16,13 +16,13 @@ except ImportError:
     _METRICS_ENABLED = False
 
 # Import database
-from app import database as db
-from app import config
+from backend import database as db
+from backend import config
 
 # Import routers
-from app.routes import resume, interview, career, learning, resume_builder
-from app.routes import analysis
-from app.routes.interview_v2 import router as interview_v2_router
+from backend.routes import resume, interview, career, learning, resume_builder
+from backend.routes import analysis
+from backend.routes.interview_v2 import router as interview_v2_router
 
 
 @asynccontextmanager

@@ -15,10 +15,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.analyzer import (  # noqa: E402
+from backend.services.analyzer import (  # noqa: E402
     apply_competency_evidence, extract_qa, rule_interview_scores,
 )
-from app.routes.interview_v2 import (  # noqa: E402
+from backend.routes.interview_v2 import (  # noqa: E402
     build_closing_message, detect_repetition, topic_ask_counts, topics_in,
 )
 
@@ -220,12 +220,12 @@ def test_evaluator_narration_is_stripped_from_speech(spoken, expected):
     """The evaluator may be repetitive; the spoken interviewer may not.
     One transcript opened nine consecutive turns with "I understand the
     overall bus tracking project..." - accurate, and not how a person talks."""
-    from app.routes.interview_v2 import strip_narration
+    from backend.routes.interview_v2 import strip_narration
     assert strip_narration(spoken) == expected
 
 
 def test_a_normal_question_is_left_alone():
-    from app.routes.interview_v2 import strip_narration
+    from backend.routes.interview_v2 import strip_narration
     plain = "Got it. Can you describe a CI/CD pipeline you have worked with?"
     assert strip_narration(plain) == plain
 
@@ -233,7 +233,7 @@ def test_a_normal_question_is_left_alone():
 def test_narration_is_counted_so_the_first_one_is_allowed():
     """Naming the pattern once is good interviewing. The guard only trims
     after it has already happened twice."""
-    from app.routes.interview_v2 import narration_count
+    from backend.routes.interview_v2 import narration_count
     conv = [{"role": "interviewer", "text": s} for s, _ in NARRATED]
     conv.append({"role": "interviewer", "text": "What did you build?"})
     assert narration_count(conv) == 3
@@ -242,7 +242,7 @@ def test_narration_is_counted_so_the_first_one_is_allowed():
 def test_no_control_characters_in_the_narration_pattern():
     """This regex was silently broken once: a \b written in a non-raw string
     became a literal backspace byte, so nothing ever matched."""
-    from app.routes.interview_v2 import _NARRATION
+    from backend.routes.interview_v2 import _NARRATION
     assert not any(ord(c) < 32 for c in _NARRATION.pattern)
 
 
@@ -251,19 +251,19 @@ def test_a_java_backend_candidate_is_not_labelled_devops():
     """Docker was matched before Java, so two Java backend candidates were
     interviewed for DevOps and then charged "unproven" on cloud questions
     they were never applying for."""
-    from app.routes.interview_v2 import detect_role
+    from backend.routes.interview_v2 import detect_role
     assert detect_role(["Java", "Spring Boot", "PostgreSQL", "Docker",
                         "JUnit"]) == "Java Developer"
     assert detect_role(["Java", "Spring Boot", "MySQL", "Docker"]) == "Java Developer"
 
 
 def test_ml_does_not_match_html():
-    from app.routes.interview_v2 import detect_role
+    from backend.routes.interview_v2 import detect_role
     assert detect_role(["HTML", "CSS"]) != "ML Engineer"
 
 
 def test_genuine_infrastructure_skills_still_classify_that_way():
-    from app.routes.interview_v2 import detect_role
+    from backend.routes.interview_v2 import detect_role
     assert detect_role(["Kubernetes", "Jenkins", "Ansible"]) == "DevOps Engineer"
 
 
@@ -273,14 +273,14 @@ def test_genuine_infrastructure_skills_still_classify_that_way():
 def test_technology_names_are_kept_as_competencies(name):
     """These collided with the question-routing tags and were silently
     discarded, deleting confirmed evidence and moving the score."""
-    from app.routes.interview_v2 import NON_COMPETENCY_NAMES
+    from backend.routes.interview_v2 import NON_COMPETENCY_NAMES
     assert name.lower() not in NON_COMPETENCY_NAMES
 
 
 @pytest.mark.parametrize("name", ["internship", "behavioural", "greeting",
                                   "project", "career", "background"])
 def test_conversation_sections_are_rejected_as_competencies(name):
-    from app.routes.interview_v2 import NON_COMPETENCY_NAMES
+    from backend.routes.interview_v2 import NON_COMPETENCY_NAMES
     assert name in NON_COMPETENCY_NAMES
 
 
@@ -288,7 +288,7 @@ def test_conversation_sections_are_rejected_as_competencies(name):
 def test_report_and_dashboard_agree_on_readiness():
     """The report called 7.3 "Developing" while the admin dashboard called the
     same number "Job Ready"."""
-    from app.services.analyzer import readiness_label
+    from backend.services.analyzer import readiness_label
     r = score(led(A="confirmed", B="confirmed", C="confirmed",
                   D="confirmed", E="no_experience"))
     assert r["job_readiness"] == readiness_label(r["overall_score"])
@@ -331,7 +331,7 @@ def test_claims_survive_the_truncated_context_window():
     passed only the last 8 turns truncated to 200 chars, so a claim from turn
     2 was invisible by turn 10 and claim_check was "none" in every transcript
     - including one where the candidate contradicted himself three times."""
-    from app.routes.interview_v2 import collect_claims
+    from backend.routes.interview_v2 import collect_claims
     conv = [{"role": "candidate", "text": "...",
              "claims": ["deployed on kubernetes"]}]
     conv += [{"role": "candidate", "text": "filler"} for _ in range(20)]
@@ -344,7 +344,7 @@ def test_claims_survive_the_truncated_context_window():
 
 
 def test_collect_claims_ignores_malformed_entries():
-    from app.routes.interview_v2 import collect_claims
+    from backend.routes.interview_v2 import collect_claims
     conv = [{"role": "candidate", "claims": ["real", "", None, 42]},
             {"role": "candidate"}]
     assert [c["claim"] for c in collect_claims(conv)] == ["real"]
@@ -355,13 +355,13 @@ def test_confirmation_requires_reaching_the_evidence_rungs():
     """Zero trade-off or failure-case questions were asked across 69
     interviewer turns, because the coverage guard always pivoted first - yet
     competencies were still being marked confirmed off a description."""
-    from app.routes.interview_v2 import CONFIRM_REQUIRES_DEPTH
+    from backend.routes.interview_v2 import CONFIRM_REQUIRES_DEPTH
     assert CONFIRM_REQUIRES_DEPTH >= 4
 
 
 # --------------------------------------------------- depth probe escalation
 def test_depth_probe_is_due_only_once_the_ladder_is_climbed():
-    from app.routes.interview_v2 import next_depth_probe
+    from backend.routes.interview_v2 import next_depth_probe
     assert next_depth_probe({"Docker": 0}, "Docker") is None
     assert next_depth_probe({"Docker": 2}, "Docker") is None
     assert next_depth_probe({"Docker": 3}, "Docker")[0] == 4
@@ -373,7 +373,7 @@ def test_depth_probe_is_due_only_once_the_ladder_is_climbed():
 def test_each_probe_names_the_actual_question_to_ask():
     """Asking for trade-off questions in prose produced zero across 69 turns.
     The directive has to contain the question itself."""
-    from app.routes.interview_v2 import DEPTH_PROBES
+    from backend.routes.interview_v2 import DEPTH_PROBES
     assert "?" in DEPTH_PROBES[5][1] and "broke" in DEPTH_PROBES[5][1]
     assert "?" in DEPTH_PROBES[6][1]
     assert "alternative" in DEPTH_PROBES[6][1]
@@ -382,7 +382,7 @@ def test_each_probe_names_the_actual_question_to_ask():
 def test_directive_text_has_no_stray_control_characters():
     """A \n written into a non-raw patch string produced a real newline
     inside an f-string and broke the module once already."""
-    from app.routes.interview_v2 import DEPTH_PROBES
+    from backend.routes.interview_v2 import DEPTH_PROBES
     for _lvl, (label, how) in DEPTH_PROBES.items():
         assert not any(ord(c) < 32 for c in label + how)
 
@@ -391,7 +391,7 @@ def test_deep_dive_gets_more_turns_than_a_stuck_probe():
     """Reaching a trade-off question is depth 6 and takes about five turns on
     one competency, but the coverage guard pivoted at three - so the top of
     the ladder was unreachable and no trade-off question was ever asked."""
-    from app.routes.interview_v2 import (MAX_TURNS_WHILE_DEEPENING,
+    from backend.routes.interview_v2 import (MAX_TURNS_WHILE_DEEPENING,
                                          MAX_CONSECUTIVE_REDIRECTS)
     assert MAX_TURNS_WHILE_DEEPENING >= 5
     assert MAX_TURNS_WHILE_DEEPENING > MAX_CONSECUTIVE_REDIRECTS
@@ -430,7 +430,7 @@ def test_running_out_of_turns_is_recorded_as_such():
     """Turn completion is not competency completion - the report must be able
     to tell the difference."""
     src = open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "app", "routes", "interview_v2.py"),
+        os.path.abspath(__file__))), "backend", "routes", "interview_v2.py"),
         encoding="utf-8").read()
     assert 'interview["end_reason"] = "turn_budget_exhausted"' in src
     assert 'interview["end_reason"] = "interviewer_closed"' in src
@@ -443,7 +443,7 @@ def test_every_field_the_code_reads_is_also_requested_from_the_model():
     answer_addresses_the_question while the model filled answered_question."""
     import re as _re
     src = open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "app", "routes", "interview_v2.py"),
+        os.path.abspath(__file__))), "backend", "routes", "interview_v2.py"),
         encoding="utf-8").read()
     contract = src[src.index("Return ONLY valid JSON"):]
     contract = contract[:contract.index('}}"""')]
@@ -460,7 +460,7 @@ def test_strong_answer_to_the_wrong_question_does_not_credit_it():
     """Meera was asked how rate limiting works across instances and answered
     with PostgreSQL idempotency. Real knowledge, wrong competency - and the
     engine counted it as progress on rate limiting."""
-    from app.routes.interview_v2 import redirect_misplaced_evidence
+    from backend.routes.interview_v2 import redirect_misplaced_evidence
     comp, redirected = redirect_misplaced_evidence(
         {"name": "Distributed Rate Limiting", "status": "confirmed",
          "note": "explained idempotency keys"},
@@ -472,7 +472,7 @@ def test_strong_answer_to_the_wrong_question_does_not_credit_it():
 
 
 def test_missing_the_question_cannot_leave_a_confirmed_status():
-    from app.routes.interview_v2 import redirect_misplaced_evidence
+    from backend.routes.interview_v2 import redirect_misplaced_evidence
     comp, redirected = redirect_misplaced_evidence(
         {"name": "Kafka", "status": "confirmed", "note": "textbook definition"},
         answered_question=False, evidenced=None)
@@ -480,7 +480,7 @@ def test_missing_the_question_cannot_leave_a_confirmed_status():
 
 
 def test_an_answered_question_is_left_alone():
-    from app.routes.interview_v2 import redirect_misplaced_evidence
+    from backend.routes.interview_v2 import redirect_misplaced_evidence
     original = {"name": "Docker", "status": "confirmed", "note": "multi-stage"}
     comp, redirected = redirect_misplaced_evidence(
         dict(original), answered_question=True, evidenced=None)
@@ -488,7 +488,7 @@ def test_an_answered_question_is_left_alone():
 
 
 def test_evidencing_the_same_competency_is_not_a_redirect():
-    from app.routes.interview_v2 import redirect_misplaced_evidence
+    from backend.routes.interview_v2 import redirect_misplaced_evidence
     comp, redirected = redirect_misplaced_evidence(
         {"name": "Docker", "status": "partial", "note": "n"},
         answered_question=False, evidenced="docker")

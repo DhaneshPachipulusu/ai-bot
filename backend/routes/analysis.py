@@ -7,8 +7,8 @@ API endpoints for interview and resume analysis.
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, Any
-from app.services.analyzer import analyze_interview, analyze_resume
-from app import database as db
+from backend.services.analyzer import analyze_interview, analyze_resume
+from backend import database as db
 import json
 import os
 

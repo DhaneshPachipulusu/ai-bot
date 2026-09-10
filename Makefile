@@ -63,7 +63,7 @@ TAG      ?= $(shell git rev-parse --short HEAD)
 .PHONY: build
 build: ## Build both images locally
 	docker build -t $(REGISTRY)/ai-interview-bot-backend:$(TAG)  -f Dockerfile .
-	docker build -t $(REGISTRY)/ai-interview-bot-frontend:$(TAG) -f ai-frontend/Dockerfile ai-frontend
+	docker build -t $(REGISTRY)/ai-interview-bot-frontend:$(TAG) -f frontend/Dockerfile frontend
 
 .PHONY: push
 push: ## Push both images

@@ -20,7 +20,7 @@ Locked JSON Schema:
 import json
 import re
 from typing import Optional
-from app.config import client, USE_MOCK_AI, GEMINI_MODEL
+from backend.config import client, USE_MOCK_AI, GEMINI_MODEL
 
 
 # ==========================================

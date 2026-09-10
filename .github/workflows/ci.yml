@@ -32,7 +32,7 @@ jobs:
           pip install ruff pytest
 
       - name: Lint
-        run: ruff check app/ || true
+        run: ruff check backend/ || true
 
       - name: Test
         run: pytest -q || echo "No tests yet"
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ai-frontend
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ai-frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
       - run: npm run lint || true
@@ -122,8 +122,8 @@ jobs:
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./ai-frontend
-          file: ./ai-frontend/Dockerfile
+          context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
           platforms: linux/amd64
           build-args: |

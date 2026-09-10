@@ -11,7 +11,7 @@ import asyncio
 import re
 import uuid
 
-from app.prompts.interviewer_system import INTERVIEWER_SYSTEM
+from backend.prompts.interviewer_system import INTERVIEWER_SYSTEM
 import json
 import os
 import random
@@ -32,7 +32,7 @@ client = None
 GEMINI_MODEL = "gemini-2.5-flash"
 
 try:
-    from app.config import client as gemini_client, USE_MOCK_AI, GEMINI_MODEL as MODEL
+    from backend.config import client as gemini_client, USE_MOCK_AI, GEMINI_MODEL as MODEL
     GEMINI_MODEL = MODEL
     
     if gemini_client and not USE_MOCK_AI:

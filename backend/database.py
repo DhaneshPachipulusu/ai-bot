@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 import os
 
-from app.config import DATABASE_PATH
+from backend.config import DATABASE_PATH
 
 DATABASE = DATABASE_PATH
 

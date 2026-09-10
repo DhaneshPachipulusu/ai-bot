@@ -8,13 +8,13 @@ Write-Host ""
 
 # Start Backend (FastAPI with uvicorn)
 Write-Host "[1/2] Starting Backend (FastAPI)..." -ForegroundColor Yellow
-$backend = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; .\.venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" -PassThru
+$backend = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot'; .\.venv\Scripts\Activate.ps1; uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000" -PassThru
 
 Start-Sleep -Seconds 2
 
 # Start Frontend (Next.js)
 Write-Host "[2/2] Starting Frontend (Next.js)..." -ForegroundColor Yellow
-$frontend = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\ai-frontend'; npm run dev" -PassThru
+$frontend = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\frontend'; npm run dev" -PassThru
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
