@@ -414,23 +414,32 @@ make up                        # docker compose
 
 ## 📸 Screenshots
 
+> Being captured. Drop the files into [`docs/screenshots/`](docs/screenshots/)
+> using the filenames listed there and uncomment the table below - the layout is
+> already written, so it is a one-line change once the images land.
+
+<!-- Uncomment once docs/screenshots/*.png exist.
+
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/01-dashboard.png" alt="Dashboard - interviews completed, average score, recent sessions"><br><sub><b>Dashboard</b> - practice history and score trend</sub></td>
-<td width="50%"><img src="docs/screenshots/02-interview-setup.png" alt="Session setup - resume upload and configuration"><br><sub><b>Session setup</b> - resume upload, target role, difficulty</sub></td>
+<td width="50%"><img src="docs/screenshots/01-dashboard.png" alt="Dashboard"><br><sub><b>Dashboard</b> - practice history and score trend</sub></td>
+<td width="50%"><img src="docs/screenshots/02-interview-setup.png" alt="Session setup"><br><sub><b>Session setup</b> - resume upload, target role, difficulty</sub></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/03-live-interview.png" alt="Interview in progress"><br><sub><b>Live interview</b> - adaptive question with the camera panel</sub></td>
-<td><img src="docs/screenshots/04-report.png" alt="Interview report with scores and readiness"><br><sub><b>Report</b> - six scores, readiness verdict, evidence-based feedback</sub></td>
+<td><img src="docs/screenshots/03-live-interview.png" alt="Live interview"><br><sub><b>Live interview</b> - adaptive question with the camera panel</sub></td>
+<td><img src="docs/screenshots/04-report.png" alt="Interview report"><br><sub><b>Report</b> - six scores, readiness verdict, evidence-based feedback</sub></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/05-report-delivery.png" alt="Delivery panel - eye contact, pace, fillers"><br><sub><b>How you came across</b> - measured delivery, kept out of the score</sub></td>
-<td><img src="docs/screenshots/06-learning-hub.png" alt="Learning hub - branch-wise topics"><br><sub><b>Learning hub</b> - branch-wise preparation material</sub></td>
+<td><img src="docs/screenshots/05-report-delivery.png" alt="Delivery panel"><br><sub><b>How you came across</b> - measured delivery, kept out of the score</sub></td>
+<td><img src="docs/screenshots/06-learning-hub.png" alt="Learning hub"><br><sub><b>Learning hub</b> - branch-wise preparation material</sub></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/07-resume-analysis.png" alt="ATS analysis"><br><sub><b>Resume AI</b> - ATS score with section-by-section analysis</sub></td>
+<td><img src="docs/screenshots/08-admin.png" alt="Admin cohort view"><br><sub><b>Admin</b> - cohort readiness at a glance</sub></td>
 </tr>
 </table>
 
-<sub>Images live in [`docs/screenshots/`](docs/screenshots/) - see the guide there
-for the exact filenames.</sub>
+-->
 
 ---
 
